@@ -1,41 +1,34 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { PropsWithChildren, useState } from 'react';
-import { StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
-
-import { ThemedText } from '@/components/ThemedText';
+import { useState } from 'react';
+import { StyleSheet, TextInput, Button, View } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
-import { Colors } from '@/constants/Colors';
 
-export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const theme = useColorScheme() ?? 'light';
+export function InputWithButton({ placeholder, buttonText }: { placeholder: string, buttonText: string }) {
+  const [inputText, setInputText] = useState('');
 
   return (
-    <ThemedView>
-      <TouchableOpacity
-        style={styles.heading}
-        onPress={() => setIsOpen((value) => !value)}
-        activeOpacity={0.8}>
-        <Ionicons
-          name={isOpen ? 'chevron-down' : 'chevron-forward-outline'}
-          size={18}
-          color={theme === 'light' ? Colors.light.icon : Colors.dark.icon}
-        />
-        <ThemedText type="defaultSemiBold">{title}</ThemedText>
-      </TouchableOpacity>
-      {isOpen && <ThemedView style={styles.content}>{children}</ThemedView>}
+    <ThemedView style={styles.container}>
+      <TextInput
+        style={styles.input}
+        placeholder={placeholder}
+        value={inputText}
+        onChangeText={setInputText}
+      />
+      <Button title={buttonText} onPress={() => console.log(inputText)} />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  heading: {
+  container: {
+    margin: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
-  content: {
-    marginTop: 6,
-    marginLeft: 24,
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 10,
+    marginRight: 10,
+    flex: 1,
   },
 });
