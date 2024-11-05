@@ -1,29 +1,53 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Button, FlatList, TextInput, Animated, Easing } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { ThemedView } from '@/components/ThemedView';
-import { InputWithButton } from '@/components/InputWithButton';
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Modal,
+  Button,
+  FlatList,
+  TextInput,
+  Animated,
+  Easing,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { ThemedView } from "@/components/ThemedView";
+import { InputWithButton } from "@/components/InputWithButton";
+import { auth } from "../FirebaseConfig"; // Import Firebase auth
+import { signOut } from "firebase/auth"; // Import signOut from Firebase
+import { router } from "expo-router"; // Import router from Expo Router
 
 export default function ProfileScreen() {
-  const [firstName, setFirstName] = useState('Prenume');
-  const [secondName, setSecondName] = useState('Nume');
-  const [username, setUsername] = useState('Username');
-  const [email, setEmail] = useState('email');
+  const [firstName, setFirstName] = useState("Prenume");
+  const [secondName, setSecondName] = useState("Nume");
+  const [username, setUsername] = useState("Username");
+  const [email, setEmail] = useState("email");
   const [profileImage, setProfileImage] = useState(null);
   const [editing, setEditing] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [projectId, setProjectId] = useState('');
-  const [projectName, setProjectName] = useState('');
+  const [projectId, setProjectId] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [projects, setProjects] = useState([
-    { id: '1', name: 'Project A' },
-    { id: '2', name: 'Project B' },
-    { id: '3', name: 'Project C' },
+    { id: "1", name: "Project A" },
+    { id: "2", name: "Project B" },
+    { id: "3", name: "Project C" },
   ]);
 
   const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
   const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth); // Sign the user out
+      router.replace("/login"); // Navigate to login screen after signing out
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   const openModal = (setModalVisible) => {
     setModalVisible(true);
@@ -62,22 +86,31 @@ export default function ProfileScreen() {
 
   const handleSave = () => {
     setEditing(false);
-    console.log('Saved Profile Data:', { firstName, secondName, username, email, profileImage });
+    console.log("Saved Profile Data:", {
+      firstName,
+      secondName,
+      username,
+      email,
+      profileImage,
+    });
   };
 
   const handleImagePicker = async () => {
     if (!editing) return;
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      alert('Permission to access camera roll is required!');
+      alert("Permission to access camera roll is required!");
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    });
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setProfileImage(result.assets[0].uri);
     } else {
-      console.log('User canceled image picker');
+      console.log("User canceled image picker");
     }
   };
 
@@ -108,23 +141,58 @@ export default function ProfileScreen() {
             <Text style={styles.title}>Profile</Text>
             <TouchableOpacity onPress={handleImagePicker} disabled={!editing}>
               <Image
-                source={profileImage ? { uri: profileImage } : require('@/assets/images/icon.png')}
+                source={
+                  profileImage
+                    ? { uri: profileImage }
+                    : require("@/assets/images/icon.png")
+                }
                 style={styles.profileImage}
               />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+            >
+              <Text style={styles.signOutButtonText}>Sign Out</Text>
+            </TouchableOpacity>
 
             <View style={styles.infoContainer}>
-              <InputWithButton placeholder="First Name" defaultValue={firstName} onChangeText={setFirstName} editable={editing} />
-              <InputWithButton placeholder="Second Name" defaultValue={secondName} onChangeText={setSecondName} editable={editing} />
-              <InputWithButton placeholder="Username" defaultValue={username} onChangeText={setUsername} editable={editing} />
-              <InputWithButton placeholder="Email" defaultValue={email} onChangeText={setEmail} editable={editing} />
+              <InputWithButton
+                placeholder="First Name"
+                defaultValue={firstName}
+                onChangeText={setFirstName}
+                editable={editing}
+              />
+              <InputWithButton
+                placeholder="Second Name"
+                defaultValue={secondName}
+                onChangeText={setSecondName}
+                editable={editing}
+              />
+              <InputWithButton
+                placeholder="Username"
+                defaultValue={username}
+                onChangeText={setUsername}
+                editable={editing}
+              />
+              <InputWithButton
+                placeholder="Email"
+                defaultValue={email}
+                onChangeText={setEmail}
+                editable={editing}
+              />
             </View>
 
             <TouchableOpacity
-              style={[styles.button, editing ? styles.saveButton : styles.editButton]}
+              style={[
+                styles.button,
+                editing ? styles.saveButton : styles.editButton,
+              ]}
               onPress={editing ? handleSave : () => setEditing(true)}
             >
-              <Text style={styles.buttonText}>{editing ? 'Save' : 'Edit Profile'}</Text>
+              <Text style={styles.buttonText}>
+                {editing ? "Save" : "Edit Profile"}
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.projectsHeader}>
@@ -145,11 +213,19 @@ export default function ProfileScreen() {
         onRequestClose={() => closeModal(setShowProjectsModal)}
       >
         <View style={styles.modalBackground}>
-          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
+            ]}
+          >
             <Text style={styles.modalTitle}>Add Project</Text>
             <Button title="Create Project" onPress={handleCreateProject} />
             <Button title="Join Project" onPress={handleJoinProject} />
-            <Button title="Close" onPress={() => closeModal(setShowProjectsModal)} />
+            <Button
+              title="Close"
+              onPress={() => closeModal(setShowProjectsModal)}
+            />
           </Animated.View>
         </View>
       </Modal>
@@ -161,7 +237,12 @@ export default function ProfileScreen() {
         onRequestClose={() => closeModal(setShowJoinModal)}
       >
         <View style={styles.modalBackground}>
-          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
+            ]}
+          >
             <Text style={styles.modalTitle}>Enter Project ID</Text>
             <TextInput
               style={styles.input}
@@ -169,11 +250,17 @@ export default function ProfileScreen() {
               value={projectId}
               onChangeText={setProjectId}
             />
-            <Button title="Join Project" onPress={() => {
-              console.log('Joining project with ID:', projectId);
-              closeModal(setShowJoinModal);
-            }} />
-            <Button title="Close" onPress={() => closeModal(setShowJoinModal)} />
+            <Button
+              title="Join Project"
+              onPress={() => {
+                console.log("Joining project with ID:", projectId);
+                closeModal(setShowJoinModal);
+              }}
+            />
+            <Button
+              title="Close"
+              onPress={() => closeModal(setShowJoinModal)}
+            />
           </Animated.View>
         </View>
       </Modal>
@@ -185,7 +272,12 @@ export default function ProfileScreen() {
         onRequestClose={() => closeModal(setShowCreateModal)}
       >
         <View style={styles.modalBackground}>
-          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
+            ]}
+          >
             <Text style={styles.modalTitle}>Enter Project Name</Text>
             <TextInput
               style={styles.input}
@@ -193,11 +285,17 @@ export default function ProfileScreen() {
               value={projectName}
               onChangeText={setProjectName}
             />
-            <Button title="Create Project" onPress={() => {
-              console.log('Creating project with name:', projectName);
-              closeModal(setShowCreateModal);
-            }} />
-            <Button title="Close" onPress={() => closeModal(setShowCreateModal)} />
+            <Button
+              title="Create Project"
+              onPress={() => {
+                console.log("Creating project with name:", projectName);
+                closeModal(setShowCreateModal);
+              }}
+            />
+            <Button
+              title="Close"
+              onPress={() => closeModal(setShowCreateModal)}
+            />
           </Animated.View>
         </View>
       </Modal>
@@ -206,22 +304,82 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f4f8' },
+  container: { flex: 1, backgroundColor: "#f0f4f8" },
+  signOutButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    backgroundColor: "#FF6F61",
+    alignItems: "center",
+    marginTop: 20,
+  },
+  signOutButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   listContent: { padding: 20 },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#FF6F61', textAlign: 'center', marginBottom: 20 },
-  profileImage: { width: 100, height: 100, borderRadius: 50, alignSelf: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#ccc' },
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#FF6F61",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignSelf: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
   infoContainer: { marginBottom: 30 },
-  button: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 5, alignItems: 'center' },
-  editButton: { backgroundColor: '#FF6F61' },
-  saveButton: { backgroundColor: '#4CAF50' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  projectsHeader: { flexDirection: 'row', alignItems: 'center', marginTop: 20 },
-  projectsTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  plusButton: { fontSize: 24, color: '#FF6F61', marginLeft: 10 },
-  projectItem: { padding: 15, backgroundColor: '#fff', borderRadius: 8, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  projectName: { fontSize: 16, color: '#333' },
-  modalBackground: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContainer: { width: 300, padding: 20, backgroundColor: 'white', borderRadius: 8, alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20 },
-  input: { width: '100%', padding: 10, borderWidth: 1, borderColor: '#ccc', borderRadius: 5, marginBottom: 20 },
+  button: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  editButton: { backgroundColor: "#FF6F61" },
+  saveButton: { backgroundColor: "#4CAF50" },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  projectsHeader: { flexDirection: "row", alignItems: "center", marginTop: 20 },
+  projectsTitle: { fontSize: 20, fontWeight: "bold", color: "#333" },
+  plusButton: { fontSize: 24, color: "#FF6F61", marginLeft: 10 },
+  projectItem: {
+    padding: 15,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  projectName: { fontSize: 16, color: "#333" },
+  modalBackground: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    width: 300,
+    padding: 20,
+    backgroundColor: "white",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", marginBottom: 20 },
+  input: {
+    width: "100%",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 5,
+    marginBottom: 20,
+  },
 });

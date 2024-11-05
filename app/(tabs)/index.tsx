@@ -30,7 +30,7 @@ export default function App() {
               ),
             }}
           />
-          <Tab.Screen
+          {/* <Tab.Screen
             name="Profile Creation"
             component={CreateAccount}
             options={{
@@ -39,7 +39,7 @@ export default function App() {
                 <TabBarIcon name="person" color={color} size={size} />  
               ),
             }}
-          />
+          /> */}
           <Tab.Screen
             name="Profile Screen"
             component={ProfileScreen}
