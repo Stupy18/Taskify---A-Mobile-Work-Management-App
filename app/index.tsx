@@ -6,6 +6,7 @@ import CalendarScreen from '@/components/CalendarScreen';
 import TabBarIcon from '@/components/navigation/TabBarIcon';  
 import React from 'react';
 import  { TaskProvider, useTasks } from '@/components/TaskProvider';
+import ProfileScreen from '@/components/ProfileScreen';
 
 
 const Tab = createBottomTabNavigator();
@@ -30,10 +31,20 @@ export default function App() {
             }}
           />
           <Tab.Screen
-            name="Profile"
+            name="Profile Creation"
             component={CreateAccount}
             options={{
-              tabBarLabel: 'Profile',
+              tabBarLabel: 'Profile Creation',
+              tabBarIcon: ({ color, size }) => (
+                <TabBarIcon name="person" color={color} size={size} />  
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="Profile Screen"
+            component={ProfileScreen}
+            options={{
+              tabBarLabel: 'Profile Screen',
               tabBarIcon: ({ color, size }) => (
                 <TabBarIcon name="person" color={color} size={size} />  
               ),
