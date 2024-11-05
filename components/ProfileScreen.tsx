@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Button, FlatList, TextInput } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal, Button, FlatList, TextInput, Animated, Easing } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedView } from '@/components/ThemedView';
 import { InputWithButton } from '@/components/InputWithButton';
@@ -21,6 +21,44 @@ export default function ProfileScreen() {
     { id: '2', name: 'Project B' },
     { id: '3', name: 'Project C' },
   ]);
+
+  const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
+  const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
+
+  const openModal = (setModalVisible) => {
+    setModalVisible(true);
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const closeModal = (setModalVisible) => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setModalVisible(false);
+    });
+  };
 
   const handleSave = () => {
     setEditing(false);
@@ -44,13 +82,13 @@ export default function ProfileScreen() {
   };
 
   const handleCreateProject = () => {
-    setShowProjectsModal(false);
-    setShowCreateModal(true);
+    closeModal(setShowProjectsModal);
+    openModal(setShowCreateModal);
   };
 
   const handleJoinProject = () => {
-    setShowProjectsModal(false);
-    setShowJoinModal(true);
+    closeModal(setShowProjectsModal);
+    openModal(setShowJoinModal);
   };
 
   const renderProjectItem = ({ item }) => (
@@ -91,7 +129,7 @@ export default function ProfileScreen() {
 
             <View style={styles.projectsHeader}>
               <Text style={styles.projectsTitle}>Projects</Text>
-              <TouchableOpacity onPress={() => setShowProjectsModal(true)}>
+              <TouchableOpacity onPress={() => openModal(setShowProjectsModal)}>
                 <Text style={styles.plusButton}>+</Text>
               </TouchableOpacity>
             </View>
@@ -100,32 +138,30 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.listContent}
       />
 
-      {/* Main Modal for Create/Join Project Options */}
+      {/* Projects Modal */}
       <Modal
         visible={showProjectsModal}
-        animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowProjectsModal(false)}
+        onRequestClose={() => closeModal(setShowProjectsModal)}
       >
         <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
+          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
             <Text style={styles.modalTitle}>Add Project</Text>
             <Button title="Create Project" onPress={handleCreateProject} />
             <Button title="Join Project" onPress={handleJoinProject} />
-            <Button title="Close" onPress={() => setShowProjectsModal(false)} />
-          </View>
+            <Button title="Close" onPress={() => closeModal(setShowProjectsModal)} />
+          </Animated.View>
         </View>
       </Modal>
 
       {/* Join Project Modal */}
       <Modal
         visible={showJoinModal}
-        animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowJoinModal(false)}
+        onRequestClose={() => closeModal(setShowJoinModal)}
       >
         <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
+          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
             <Text style={styles.modalTitle}>Enter Project ID</Text>
             <TextInput
               style={styles.input}
@@ -135,22 +171,21 @@ export default function ProfileScreen() {
             />
             <Button title="Join Project" onPress={() => {
               console.log('Joining project with ID:', projectId);
-              setShowJoinModal(false);
+              closeModal(setShowJoinModal);
             }} />
-            <Button title="Close" onPress={() => setShowJoinModal(false)} />
-          </View>
+            <Button title="Close" onPress={() => closeModal(setShowJoinModal)} />
+          </Animated.View>
         </View>
       </Modal>
 
       {/* Create Project Modal */}
       <Modal
         visible={showCreateModal}
-        animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowCreateModal(false)}
+        onRequestClose={() => closeModal(setShowCreateModal)}
       >
         <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
+          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
             <Text style={styles.modalTitle}>Enter Project Name</Text>
             <TextInput
               style={styles.input}
@@ -160,10 +195,10 @@ export default function ProfileScreen() {
             />
             <Button title="Create Project" onPress={() => {
               console.log('Creating project with name:', projectName);
-              setShowCreateModal(false);
+              closeModal(setShowCreateModal);
             }} />
-            <Button title="Close" onPress={() => setShowCreateModal(false)} />
-          </View>
+            <Button title="Close" onPress={() => closeModal(setShowCreateModal)} />
+          </Animated.View>
         </View>
       </Modal>
     </ThemedView>
