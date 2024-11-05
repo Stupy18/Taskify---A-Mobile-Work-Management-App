@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useTasks } from '@/components/TaskProvider'; // Adjust the path if necessary
 
@@ -48,6 +48,9 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  
+  const scaleAnim = useRef(new Animated.Value(0)).current; // Scale animation for modal
+  const fadeAnim = useRef(new Animated.Value(0)).current; // Fade animation for modal
 
   // Get marked dates for the calendar
   const markedDates = getMarkedDatesFromTasks(tasks);
@@ -59,11 +62,46 @@ export default function CalendarScreen() {
     );
     if (selectedTasks.length > 0) {
       setSelectedTask(selectedTasks[0]); // Show first task for simplicity
-      setIsModalVisible(true);
+      openModal();
     } else {
       setSelectedTask(null);
     }
     setSelectedDate(day.dateString);
+  };
+
+  const openModal = () => {
+    setIsModalVisible(true);
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const closeModal = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsModalVisible(false);
+    });
   };
 
   return (
@@ -84,12 +122,11 @@ export default function CalendarScreen() {
       {/* Modal for task details */}
       <Modal
         visible={isModalVisible}
-        animationType="slide"
         transparent={true}
-        onRequestClose={() => setIsModalVisible(false)} // Close modal on back press
+        onRequestClose={closeModal} // Close modal on back press
       >
         <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
+          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
             {selectedTask ? (
               <>
                 <Text style={styles.modalTitle}>{selectedTask.title}</Text>
@@ -99,7 +136,7 @@ export default function CalendarScreen() {
                   <Text key={index}>{comment}</Text>
                 ))}
                 <TouchableOpacity
-                  onPress={() => setIsModalVisible(false)}
+                  onPress={closeModal}
                   style={styles.closeButton}
                 >
                   <Text style={styles.closeButtonText}>Close</Text>
@@ -108,7 +145,7 @@ export default function CalendarScreen() {
             ) : (
               <Text>No task found for this date.</Text>
             )}
-          </View>
+          </Animated.View>
         </View>
       </Modal>
     </View>
