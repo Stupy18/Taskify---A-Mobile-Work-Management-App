@@ -43,7 +43,7 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     try {
       await signOut(auth); // Sign the user out
-      router.replace("/login"); // Navigate to login screen after signing out
+      router.replace("/LoginScreen"); // Navigate to login screen after signing out
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -149,12 +149,6 @@ export default function ProfileScreen() {
                 style={styles.profileImage}
               />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={handleSignOut}
-            >
-              <Text style={styles.signOutButtonText}>Sign Out</Text>
-            </TouchableOpacity>
 
             <View style={styles.infoContainer}>
               <InputWithButton
@@ -183,6 +177,16 @@ export default function ProfileScreen() {
               />
             </View>
 
+            <View style={styles.projectsHeader}>
+              <Text style={styles.projectsTitle}>Projects</Text>
+              <TouchableOpacity onPress={() => openModal(setShowProjectsModal)}>
+                <Text style={styles.plusButton}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        }
+        ListFooterComponent={
+          <View style={styles.footerButtons}>
             <TouchableOpacity
               style={[
                 styles.button,
@@ -195,13 +199,13 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
 
-            <View style={styles.projectsHeader}>
-              <Text style={styles.projectsTitle}>Projects</Text>
-              <TouchableOpacity onPress={() => openModal(setShowProjectsModal)}>
-                <Text style={styles.plusButton}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+            >
+              <Text style={styles.signOutButtonText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
         }
         contentContainerStyle={styles.listContent}
       />
@@ -305,14 +309,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f4f8" },
-  signOutButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    backgroundColor: "#FF6F61",
-    alignItems: "center",
-    marginTop: 20,
-  },
+  
   signOutButtonText: {
     color: "#fff",
     fontSize: 16,
@@ -336,12 +333,7 @@ const styles = StyleSheet.create({
     borderColor: "#ccc",
   },
   infoContainer: { marginBottom: 30 },
-  button: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    alignItems: "center",
-  },
+ 
   editButton: { backgroundColor: "#FF6F61" },
   saveButton: { backgroundColor: "#4CAF50" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
@@ -382,4 +374,32 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginBottom: 20,
   },
+  footerButtons: {
+    marginTop: 20,
+    paddingVertical: 20,
+    alignItems: "center",
+    width: "100%",
+  },
+  
+  button: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    alignItems: "center",
+    width: "90%", // Matches the input width
+    alignSelf: "center",
+  },
+  
+  signOutButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    backgroundColor: "#FF6F61",
+    alignItems: "center",
+    width: "90%", // Matches the input width
+    alignSelf: "center",
+    marginTop: 10,
+  },
+  
+  
 });
