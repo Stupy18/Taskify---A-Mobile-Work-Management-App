@@ -7,22 +7,39 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { auth } from "../FirebaseConfig";
+import { auth, db } from "../FirebaseConfig";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from "firebase/auth";
 import { router } from "expo-router";
 import { useTheme } from "@react-navigation/native";
+import { doc, setDoc, collection } from "firebase/firestore";
 
 const Login = () => {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [username, setUsername] = React.useState("");
   const { colors } = useTheme();
 
+  // Add user to Firestore after sign-up
+  const addUser = async (user) => {
+    try {
+      await setDoc(doc(collection(db, "users"), user.uid), {
+        username: username,
+        email: user.email,
+      });
+      console.log("User added to Firestore");
+    } catch (error) {
+      console.error("Error adding user: ", error);
+    }
+  };
+
+  // Sign-in function
   const signIn = async () => {
     try {
-      const user = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
       if (user) router.replace("/(tabs)");
     } catch (error) {
       console.log(error);
@@ -30,9 +47,14 @@ const Login = () => {
     }
   };
 
+  // Sign-up function
   const signUp = async () => {
     try {
-      const user = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Add user to Firestore after successful sign-up
+      await addUser(user);
       if (user) router.replace("/(tabs)");
     } catch (error) {
       console.log(error);
@@ -73,6 +95,20 @@ const Login = () => {
         value={password}
         onChangeText={(text) => setPassword(text)}
         secureTextEntry
+      />
+      <TextInput
+        style={[
+          styles.input,
+          {
+            backgroundColor: colors.card,
+            color: colors.text,
+            borderColor: colors.border,
+          },
+        ]}
+        placeholder="Username"
+        placeholderTextColor={colors.border}
+        value={username}
+        onChangeText={(text) => setUsername(text)}  // Bind username field
       />
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colors.primary }]}
