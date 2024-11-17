@@ -46,6 +46,7 @@
     "react-native-screens": "3.31.1",
     "react-native-web": "~0.19.10",
     "test": "file:"
+    
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
