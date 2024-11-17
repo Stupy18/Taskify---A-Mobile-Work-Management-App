@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import CreateAccount from '@/components/CreateAccount'; 
 import MainScreen from '@/components/MainScreen';
 import CalendarScreen from '@/components/CalendarScreen';
-import TabBarIcon from '@/components/navigation/TabBarIcon';  
+import TabBarIcon from '@/components/navigation/TabBarIcon';
 import React from 'react';
 import  { TaskProvider, useTasks } from '@/components/TaskProvider';
 import ProfileScreen from '@/components/ProfileScreen';
@@ -26,7 +26,7 @@ export default function App() {
             options={{
               tabBarLabel: 'Main',
               tabBarIcon: ({ color, size }) => (
-                <TabBarIcon name="home" color={color} size={size} />  
+                <TabBarIcon name="home" color={color} size={size} />
               ),
             }}
           />
