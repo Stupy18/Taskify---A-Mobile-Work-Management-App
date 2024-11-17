@@ -15,9 +15,11 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { ThemedView } from "@/components/ThemedView";
 import { InputWithButton } from "@/components/InputWithButton";
-import { auth } from "../FirebaseConfig"; // Import Firebase auth
+import { auth, db } from "../FirebaseConfig"; // Import Firebase auth
 import { signOut } from "firebase/auth"; // Import signOut from Firebase
 import { router } from "expo-router"; // Import router from Expo Router
+import { doc, setDoc, collection, serverTimestamp } from "firebase/firestore";
+
 
 export default function ProfileScreen() {
   const [firstName, setFirstName] = useState("Prenume");
@@ -36,6 +38,7 @@ export default function ProfileScreen() {
     { id: "2", name: "Project B" },
     { id: "3", name: "Project C" },
   ]);
+  const [description, setDescription] = useState("");
 
   const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
   const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
@@ -114,7 +117,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     closeModal(setShowProjectsModal);
     openModal(setShowCreateModal);
   };
@@ -285,11 +288,49 @@ export default function ProfileScreen() {
               value={projectName}
               onChangeText={setProjectName}
             />
+            <TextInput
+              style={[styles.input, { marginTop: 10 }]}
+              placeholder="Description (optional)"
+              multiline
+              value={description}
+              onChangeText={setDescription}
+            />
+            
             <Button
               title="Create Project"
-              onPress={() => {
-                console.log("Creating project with name:", projectName);
-                closeModal(setShowCreateModal);
+              onPress={async () => {
+                if (!projectName.trim()) {
+                  alert("Please enter a project name.");
+                  return;
+                }
+      
+                const ownerId = auth.currentUser?.uid;
+                const projectData = {
+                  projectName,
+                  description,
+                  ownerId,
+                  members: [ownerId],
+                  created_at: serverTimestamp(),
+                };
+      
+                try {
+                  const projectRef = doc(collection(db, "projects"));
+                  await setDoc(projectRef, projectData);
+                  alert(`Project "${projectName}" created successfully!`);
+      
+                  // Update the local state (if needed)
+                  setProjects((prev) => [
+                    ...prev,
+                    { id: projectRef.id, name: projectName },
+                  ]);
+      
+                  setProjectName("");
+                  setDescription("");
+                  closeModal(setShowCreateModal);
+                } catch (error) {
+                  console.error("Error creating project:", error);
+                  alert("Failed to create project. Please try again.");
+                }
               }}
             />
             <Button
