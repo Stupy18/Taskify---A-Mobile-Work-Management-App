@@ -45,9 +45,13 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   return (
-      <Stack>
-        <Stack.Screen name="login" options={{ headerShown: false}} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
+    <Stack
+      screenOptions={{
+        headerShown: false, // Globally hide headers for all screens in (tabs)
+      }}
+    >
+      <Stack.Screen name="index" />
+      {/* Other screens */}
+    </Stack>
   );
 }
