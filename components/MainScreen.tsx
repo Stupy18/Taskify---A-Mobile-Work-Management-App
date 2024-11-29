@@ -27,6 +27,7 @@ const TaskCard = ({ task }) => {
   const [commentText, setCommentText] = useState(""); // For the new comment text
   const [comments, setComments] = useState([]); // To hold the comments for this task
   const [commentCount, setCommentCount] = useState(task.commentCount || 0); // Track comment count locally
+  const [showTaskDetails, setShowTaskDetails] = useState(false);
 
   // Function to fetch comments for the task
   const fetchComments = async (taskId) => {
@@ -95,36 +96,79 @@ const TaskCard = ({ task }) => {
   };
 
   return (
-    <TouchableOpacity style={styles.taskCard}>
-      <Text style={styles.taskTitle}>{task.title}</Text>
-      <Text style={styles.taskDetails}>Due: {task.dueDate}</Text>
-      <Text style={styles.taskDetails}>Comments: {fetchComments.length}</Text>
-
+    <View style={styles.taskCard}>
       <TouchableOpacity
-        style={styles.commentButton}
         onPress={() => {
-          fetchComments(task.id); // Fetch comments when button is clicked
-          setShowComments(true); // Show the comments modal
+          setShowTaskDetails(true); // Open task details modal
         }}
       >
-        <Text style={styles.commentButtonText}>Show Comments</Text>
+        <Text style={styles.taskTitle}>{task.title}</Text>
+        <Text style={styles.taskDetails}>Due: {task.dueDate}</Text>
+        <Text style={styles.taskDetails}>Comments: {commentCount}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteTask}>
-        <Text style={styles.deleteButtonText}>Delete Task</Text>
-      </TouchableOpacity>
+      {/* Task Details Modal */}
+      <Modal
+        visible={showTaskDetails}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTaskDetails(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Task Details</Text>
+            <Text style={styles.modalTaskTitle}>{task.title}</Text>
+            <Text style={styles.modalTaskDetails}>
+              Due Date: {task.dueDate}
+            </Text>
+            <Text style={styles.modalTaskDetails}>Status: {task.status}</Text>
+            <Text style={styles.modalTaskDetails}>
+              Comments Count: {commentCount}
+            </Text>
 
-      {/* Modal to display comments */}
+            {/* Close Task Details Modal */}
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowTaskDetails(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+
+            {/* Show Comments Button */}
+            <TouchableOpacity
+              style={styles.commentButton}
+              onPress={() => {
+                setShowTaskDetails(false); // Close the task details modal
+                fetchComments(task.id); // Fetch comments for this task
+                setShowComments(true); // Show comments modal
+              }}
+            >
+              <Text style={styles.commentButtonText}>Show Comments</Text>
+            </TouchableOpacity>
+
+            {/* Delete Task Button */}
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDeleteTask}
+            >
+              <Text style={styles.deleteButtonText}>Delete Task</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Comments Modal */}
       <Modal
         visible={showComments}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowComments(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Comments for {task.title}</Text>
+            <Text style={styles.modalTitle}>Comments</Text>
 
+            {/* Show Comments */}
             <FlatList
               data={comments}
               renderItem={({ item }) => (
@@ -132,14 +176,16 @@ const TaskCard = ({ task }) => {
                   <Text style={styles.commentText}>{item.text}</Text>
                   <TouchableOpacity
                     style={styles.deleteCommentButton}
-                    onPress={() => handleDeleteComment(item.id)} // Delete the comment
+                    onPress={() => handleDeleteComment(item.id)}
                   >
                     <Text style={styles.deleteCommentButtonText}>Delete</Text>
                   </TouchableOpacity>
                 </View>
               )}
-              keyExtractor={(item, index) => index.toString()}
+              keyExtractor={(item) => item.id}
             />
+
+            {/* Add Comment */}
             <TextInput
               style={styles.commentInput}
               value={commentText}
@@ -152,6 +198,8 @@ const TaskCard = ({ task }) => {
             >
               <Text style={styles.addButtonText}>Add Comment</Text>
             </TouchableOpacity>
+
+            {/* Close Comments Modal */}
             <TouchableOpacity
               style={styles.closeButton}
               onPress={() => setShowComments(false)}
@@ -161,7 +209,7 @@ const TaskCard = ({ task }) => {
           </View>
         </View>
       </Modal>
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -280,6 +328,17 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     backgroundColor: "#f0f4f8",
     padding: 10,
+  },
+  modalTaskTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  modalTaskDetails: {
+    fontSize: 16,
+    marginBottom: 10,
+    color: "#333",
   },
   column: {
     flex: 1,
