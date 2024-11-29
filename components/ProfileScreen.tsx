@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import { auth, db } from "../FirebaseConfig"; // Import Firebase auth
 import { signOut } from "firebase/auth"; // Import signOut from Firebase
 import { router } from "expo-router"; // Import router from Expo Router
 import { doc, setDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useUser } from "../contexts/UserContext";
+
 
 
 export default function ProfileScreen() {
@@ -28,17 +30,15 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState("email");
   const [profileImage, setProfileImage] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [projects, setProjects] = useState([]);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [projectId, setProjectId] = useState("");
   const [projectName, setProjectName] = useState("");
-  const [projects, setProjects] = useState([
-    { id: "1", name: "Project A" },
-    { id: "2", name: "Project B" },
-    { id: "3", name: "Project C" },
-  ]);
   const [description, setDescription] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const { userProjects } = useUser();
+
 
   const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
   const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
@@ -129,14 +129,15 @@ export default function ProfileScreen() {
 
   const renderProjectItem = ({ item }) => (
     <View style={styles.projectItem}>
-      <Text style={styles.projectName}>{item.name}</Text>
+      <Text style={styles.projectName}>{item.projectName}</Text>
+      <Text style={styles.projectDescription}>{item.description}</Text>
     </View>
   );
 
   return (
     <ThemedView style={styles.container}>
       <FlatList
-        data={projects}
+        data={userProjects}
         keyExtractor={(item) => item.id}
         renderItem={renderProjectItem}
         ListHeaderComponent={
@@ -401,6 +402,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   projectName: { fontSize: 16, color: "#333" },
+  projectDescription: { fontSize: 14, color: "#555" },
   modalBackground: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

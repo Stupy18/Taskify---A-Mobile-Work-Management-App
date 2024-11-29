@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
-import { useTasks } from './TaskProvider';
+import { useTasks } from '../contexts/TaskProvider';
 
 
 const TaskCard = ({ task }) => {
