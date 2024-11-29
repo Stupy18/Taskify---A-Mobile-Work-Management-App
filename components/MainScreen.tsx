@@ -1,18 +1,43 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
-import { useTasks } from '../contexts/TaskProvider';
-import { db, auth } from '../FirebaseConfig';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Alert,
+} from "react-native";
+import { useTasks } from "../contexts/TaskProvider";
+import { db, auth } from "../FirebaseConfig";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  getDocs,
+} from "firebase/firestore";
 
 const TaskCard = ({ task }) => {
-  const { addComment } = useTasks();  // Get addComment function from context
-  const [commentText, setCommentText] = useState('');
+  const { addComment, updateTaskStatus } = useTasks();
+  const [showComments, setShowComments] = useState(false); // To control modal visibility
+  const [commentText, setCommentText] = useState(""); // For the new comment text
+  const [comments, setComments] = useState([]); // To hold the comments for this task
 
-  const handleAddComment = () => {
-    if (commentText.trim()) {
-      addComment(task.id, commentText); // Add the comment to Firestore
-      setCommentText('');  // Clear input field
-    }
+  // Function to fetch comments for the task
+  const fetchComments = async (taskId) => {
+    const commentsSnapshot = await getDocs(
+      collection(db, "tasks", taskId, "comments")
+    );
+    const fetchedComments = commentsSnapshot.docs.map((doc) => doc.data());
+    setComments(fetchedComments);
+  };
+
+  const handleAddComment = async () => {
+    if (commentText.trim() === "") return;
+    await addComment(task.id, commentText);
+    setCommentText("");
+    fetchComments(task.id); // Refresh comments after adding a new one
   };
 
   return (
@@ -21,6 +46,57 @@ const TaskCard = ({ task }) => {
       <Text style={styles.taskDetails}>Due: {task.dueDate}</Text>
       <Text style={styles.taskDetails}>Comments: {task.comments.length}</Text>
 
+      <TouchableOpacity
+        style={styles.commentButton}
+        onPress={() => {
+          fetchComments(task.id); // Fetch comments when button is clicked
+          setShowComments(true); // Show the comments modal
+        }}
+      >
+        <Text style={styles.commentButtonText}>Show Comments</Text>
+      </TouchableOpacity>
+
+      {/* Modal to display comments */}
+      <Modal
+        visible={showComments}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowComments(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Comments for {task.title}</Text>
+            <FlatList
+              data={comments}
+              renderItem={({ item }) => (
+                <View style={styles.commentContainer}>
+                  <Text style={styles.commentText}>{item.text}</Text>
+                </View>
+              )}
+              keyExtractor={(item, index) => index.toString()}
+            />
+            <TextInput
+              style={styles.commentInput}
+              value={commentText}
+              onChangeText={setCommentText}
+              placeholder="Add a comment"
+            />
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleAddComment}
+            >
+              <Text style={styles.addButtonText}>Add Comment</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowComments(false)}
+            >
+              <Text style={styles.closeButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Add Comment Section */}
       <TextInput
         style={styles.commentInput}
@@ -28,7 +104,10 @@ const TaskCard = ({ task }) => {
         value={commentText}
         onChangeText={setCommentText}
       />
-      <TouchableOpacity onPress={handleAddComment} style={styles.addCommentButton}>
+      <TouchableOpacity
+        onPress={handleAddComment}
+        style={styles.addCommentButton}
+      >
         <Text style={styles.addCommentText}>Add Comment</Text>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -51,22 +130,25 @@ const Column = ({ title, data }) => {
 
 export default function MainScreen() {
   const { tasks, addTask } = useTasks(); // Get tasks and addTask from context
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [taskColumn, setTaskColumn] = useState('To Do');  // Default column is 'To Do'
-  const [modalVisible, setModalVisible] = useState(false);  // Modal visibility state
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [taskColumn, setTaskColumn] = useState("To Do"); // Default column is 'To Do'
+  const [modalVisible, setModalVisible] = useState(false); // Modal visibility state
 
   // Handle adding a new task
   const handleAddTask = async () => {
-    if (newTaskTitle.trim() === '' || newTaskDueDate.trim() === '') {
-      Alert.alert('Error', 'Please provide both a title and a due date for the task.');
+    if (newTaskTitle.trim() === "" || newTaskDueDate.trim() === "") {
+      Alert.alert(
+        "Error",
+        "Please provide both a title and a due date for the task."
+      );
       return;
     }
 
     const taskData = {
       title: newTaskTitle,
       dueDate: newTaskDueDate,
-      status: taskColumn,  // Add the column as the status of the task
+      status: taskColumn, // Add the column as the status of the task
       comments: [],
       created_at: serverTimestamp(),
       ownerId: auth.currentUser?.uid, // Add current user ID as the task owner
@@ -74,17 +156,17 @@ export default function MainScreen() {
 
     try {
       // Add task to Firestore
-      const taskRef = await addDoc(collection(db, 'tasks'), taskData);
-      console.log('Task created with ID: ', taskRef.id);
+      const taskRef = await addDoc(collection(db, "tasks"), taskData);
+      console.log("Task created with ID: ", taskRef.id);
 
       // Clear the input fields
-      setNewTaskTitle('');
-      setNewTaskDueDate('');
+      setNewTaskTitle("");
+      setNewTaskDueDate("");
       setModalVisible(false); // Close modal after task is created
-      Alert.alert('Success', `Task "${newTaskTitle}" created successfully!`);
+      Alert.alert("Success", `Task "${newTaskTitle}" created successfully!`);
     } catch (error) {
-      console.error('Error creating task: ', error);
-      Alert.alert('Error', 'Failed to create task. Please try again.');
+      console.error("Error creating task: ", error);
+      Alert.alert("Error", "Failed to create task. Please try again.");
     }
   };
 
@@ -95,7 +177,10 @@ export default function MainScreen() {
       <Column title="Done" data={tasks.done} />
 
       {/* Add Task Button */}
-      <TouchableOpacity style={styles.addButton} onPress={() => setModalVisible(true)}>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => setModalVisible(true)}
+      >
         <Text style={styles.addButtonText}>+ Add Task</Text>
       </TouchableOpacity>
 
@@ -125,7 +210,10 @@ export default function MainScreen() {
             <TouchableOpacity onPress={handleAddTask} style={styles.addButton}>
               <Text style={styles.addButtonText}>Add Task</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.cancelButton}>
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              style={styles.cancelButton}
+            >
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -138,106 +226,138 @@ export default function MainScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    flexDirection: 'column',
-    backgroundColor: '#f0f4f8',
+    flexDirection: "column",
+    backgroundColor: "#f0f4f8",
     padding: 10,
   },
   column: {
     flex: 1,
     marginHorizontal: 5,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 10,
     padding: 10,
   },
   columnTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   columnContent: {
     flexGrow: 1,
   },
   taskCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: "#f9f9f9",
     padding: 15,
     marginBottom: 10,
     borderRadius: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
   },
   taskTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   taskDetails: {
     fontSize: 14,
-    color: '#6e6e6e',
+    color: "#6e6e6e",
   },
   addButton: {
     marginTop: 10,
     padding: 10,
-    backgroundColor: '#007bff',
+    backgroundColor: "#007bff",
     borderRadius: 5,
   },
   addButtonText: {
-    textAlign: 'center',
-    color: '#fff',
+    textAlign: "center",
+    color: "#fff",
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   modalTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   input: {
     height: 40,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderWidth: 1,
     marginBottom: 10,
     paddingLeft: 8,
     borderRadius: 5,
   },
   modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   cancelButton: {
     marginTop: 10,
     padding: 10,
-    backgroundColor: '#ccc',
+    backgroundColor: "#ccc",
     borderRadius: 5,
     flex: 1,
     marginLeft: 10,
   },
   commentInput: {
     height: 40,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderWidth: 1,
     marginBottom: 10,
     paddingLeft: 8,
     borderRadius: 5,
   },
   cancelButtonText: {
-    textAlign: 'center',
-    color: '#fff',
+    textAlign: "center",
+    color: "#fff",
   },
   addCommentButton: {
     marginTop: 10,
     padding: 10,
-    backgroundColor: '#007bff',
+    backgroundColor: "#007bff",
     borderRadius: 5,
   },
   addCommentText: {
-    textAlign: 'center',
-    color: '#fff',
+    textAlign: "center",
+    color: "#fff",
+  },
+  commentButton: {
+    marginTop: 10,
+    backgroundColor: "#007bff",
+    padding: 8,
+    borderRadius: 5,
+  },
+  commentButtonText: {
+    color: "#fff",
+    textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  closeButton: {
+    backgroundColor: "#dc3545",
+    padding: 10,
+    borderRadius: 5,
+  },
+  closeButtonText: {
+    color: "#fff",
+    textAlign: "center",
+  },
+  commentContainer: {
+    marginBottom: 10,
+  },
+  commentText: {
+    fontSize: 14,
+    color: "#333",
   },
 });
