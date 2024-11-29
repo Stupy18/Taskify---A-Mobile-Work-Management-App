@@ -16,35 +16,89 @@ import {
   addDoc,
   serverTimestamp,
   getDocs,
+  updateDoc,
+  doc,
+  deleteDoc,
 } from "firebase/firestore";
 
 const TaskCard = ({ task }) => {
-  const { addComment, updateTaskStatus } = useTasks();
+  const { addComment } = useTasks();
   const [showComments, setShowComments] = useState(false); // To control modal visibility
   const [commentText, setCommentText] = useState(""); // For the new comment text
   const [comments, setComments] = useState([]); // To hold the comments for this task
+  const [commentCount, setCommentCount] = useState(task.commentCount || 0); // Track comment count locally
 
   // Function to fetch comments for the task
   const fetchComments = async (taskId) => {
-    const commentsSnapshot = await getDocs(
-      collection(db, "tasks", taskId, "comments")
-    );
-    const fetchedComments = commentsSnapshot.docs.map((doc) => doc.data());
-    setComments(fetchedComments);
+    try {
+      const commentsSnapshot = await getDocs(
+        collection(db, "tasks", taskId, "comments")
+      );
+      const fetchedComments = commentsSnapshot.docs.map((doc) => ({
+        id: doc.id, // Store the comment's document ID
+        ...doc.data(),
+      }));
+      setComments(fetchedComments);
+
+      // Update comment counter for task
+      setCommentCount(fetchedComments.length);
+
+      // Update comment counter for task
+      await updateDoc(doc(db, "tasks", taskId), {
+        commentCount: fetchedComments.length, // Set the comment count field
+      });
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+    }
   };
 
   const handleAddComment = async () => {
     if (commentText.trim() === "") return;
-    await addComment(task.id, commentText);
-    setCommentText("");
-    fetchComments(task.id); // Refresh comments after adding a new one
+
+    try {
+      // Add the comment to Firestore
+      await addComment(task.id, commentText);
+      setCommentText("");
+
+      // Fetch and display the updated list of comments
+      fetchComments(task.id);
+    } catch (error) {
+      console.error("Error adding comment or updating comment count: ", error);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await deleteDoc(doc(db, "tasks", task.id, "comments", commentId));
+      fetchComments(task.id); // Refresh the comments list after deletion
+    } catch (e) {
+      console.error("Error deleting comment: ", e);
+    }
+  };
+
+  const handleDeleteTask = async () => {
+    try {
+      // Delete all comments first (optional, based on your structure)
+      const commentsSnapshot = await getDocs(
+        collection(db, "tasks", task.id, "comments")
+      );
+      commentsSnapshot.forEach((doc) => {
+        deleteDoc(doc.ref);
+      });
+
+      // Then delete the task
+      await deleteDoc(doc(db, "tasks", task.id));
+      console.log("Task deleted successfully");
+    } catch (e) {
+      console.error("Error deleting task: ", e);
+    }
   };
 
   return (
     <TouchableOpacity style={styles.taskCard}>
       <Text style={styles.taskTitle}>{task.title}</Text>
       <Text style={styles.taskDetails}>Due: {task.dueDate}</Text>
-      <Text style={styles.taskDetails}>Comments: {task.comments.length}</Text>
+      <Text style={styles.taskDetails}>Comments: {fetchComments.length}</Text>
 
       <TouchableOpacity
         style={styles.commentButton}
@@ -54,6 +108,10 @@ const TaskCard = ({ task }) => {
         }}
       >
         <Text style={styles.commentButtonText}>Show Comments</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteTask}>
+        <Text style={styles.deleteButtonText}>Delete Task</Text>
       </TouchableOpacity>
 
       {/* Modal to display comments */}
@@ -66,11 +124,18 @@ const TaskCard = ({ task }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Comments for {task.title}</Text>
+
             <FlatList
               data={comments}
               renderItem={({ item }) => (
                 <View style={styles.commentContainer}>
                   <Text style={styles.commentText}>{item.text}</Text>
+                  <TouchableOpacity
+                    style={styles.deleteCommentButton}
+                    onPress={() => handleDeleteComment(item.id)} // Delete the comment
+                  >
+                    <Text style={styles.deleteCommentButtonText}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
               )}
               keyExtractor={(item, index) => index.toString()}
@@ -96,20 +161,6 @@ const TaskCard = ({ task }) => {
           </View>
         </View>
       </Modal>
-
-      {/* Add Comment Section */}
-      <TextInput
-        style={styles.commentInput}
-        placeholder="Add a comment"
-        value={commentText}
-        onChangeText={setCommentText}
-      />
-      <TouchableOpacity
-        onPress={handleAddComment}
-        style={styles.addCommentButton}
-      >
-        <Text style={styles.addCommentText}>Add Comment</Text>
-      </TouchableOpacity>
     </TouchableOpacity>
   );
 };
@@ -359,5 +410,25 @@ const styles = StyleSheet.create({
   commentText: {
     fontSize: 14,
     color: "#333",
+  },
+  deleteButton: {
+    marginTop: 10,
+    backgroundColor: "#dc3545",
+    padding: 8,
+    borderRadius: 5,
+  },
+  deleteButtonText: {
+    color: "#fff",
+    textAlign: "center",
+  },
+  deleteCommentButton: {
+    marginTop: 5,
+    backgroundColor: "#dc3545",
+    padding: 5,
+    borderRadius: 5,
+  },
+  deleteCommentButtonText: {
+    color: "#fff",
+    textAlign: "center",
   },
 });

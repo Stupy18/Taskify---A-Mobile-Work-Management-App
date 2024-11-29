@@ -34,7 +34,7 @@ export const TaskProvider = ({ children }) => {
       snapshot.docs.forEach((doc) => {
         const task = doc.data();
         const normalizedStatus = normalizeStatus(task.status); // Normalize the status
-        tasksData[normalizedStatus].push({ id: doc.id, ...task });
+        tasksData[normalizedStatus].push({ id: doc.id, ...task, commentCount: task.commentCount || 0 });
       });
 
       setTasks(tasksData);
