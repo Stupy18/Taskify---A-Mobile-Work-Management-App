@@ -15,9 +15,9 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { ThemedView } from "@/components/ThemedView";
 import { InputWithButton } from "@/components/InputWithButton";
-import { auth, db } from "../FirebaseConfig"; // Import Firebase auth
-import { signOut } from "firebase/auth"; // Import signOut from Firebase
-import { router } from "expo-router"; // Import router from Expo Router
+import { auth, db } from "../FirebaseConfig";
+import { signOut } from "firebase/auth";
+import { router } from "expo-router";
 import {
   doc,
   setDoc,
