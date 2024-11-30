@@ -18,10 +18,14 @@ import { InputWithButton } from "@/components/InputWithButton";
 import { auth, db } from "../FirebaseConfig"; // Import Firebase auth
 import { signOut } from "firebase/auth"; // Import signOut from Firebase
 import { router } from "expo-router"; // Import router from Expo Router
-import { doc, setDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  collection,
+  serverTimestamp,
+  deleteDoc,
+} from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
-
-
 
 export default function ProfileScreen() {
   const [firstName, setFirstName] = useState("Prenume");
@@ -38,7 +42,8 @@ export default function ProfileScreen() {
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState("");
   const { userProjects } = useUser();
-
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
   const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
@@ -127,11 +132,33 @@ export default function ProfileScreen() {
     openModal(setShowJoinModal);
   };
 
+  const handleShowProjectDetails = (project) => {
+    setSelectedProject(project);
+    setShowProjectDetailsModal(true);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!selectedProject) return;
+
+    try {
+      await deleteDoc(doc(db, "projects", selectedProject.id));
+      alert("Project deleted successfully!");
+      setShowProjectDetailsModal(false);
+      // Optionally, remove from local state to reflect the deletion
+      setProjects(projects.filter((p) => p.id !== selectedProject.id));
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      alert("Failed to delete project.");
+    }
+  };
+
   const renderProjectItem = ({ item }) => (
-    <View style={styles.projectItem}>
-      <Text style={styles.projectName}>{item.projectName}</Text>
-      <Text style={styles.projectDescription}>{item.description}</Text>
-    </View>
+    <TouchableOpacity onPress={() => handleShowProjectDetails(item)}>
+      <View style={styles.projectItem}>
+        <Text style={styles.projectName}>{item.projectName}</Text>
+        <Text style={styles.projectDescription}>{item.description}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -234,6 +261,31 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* Project Details Modal */}
+      <Modal
+        visible={showProjectDetailsModal}
+        transparent={true}
+        onRequestClose={() => setShowProjectDetailsModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Project Details</Text>
+            <Text style={styles.modalContent}>
+              Name: {selectedProject?.projectName || "N/A"}
+            </Text>
+            <Text style={styles.modalContent}>
+              Description:{" "}
+              {selectedProject?.description || "No description provided."}
+            </Text>
+            <Button title="Delete Project" onPress={handleDeleteProject} />
+            <Button
+              title="Close"
+              onPress={() => setShowProjectDetailsModal(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Join Project Modal */}
       <Modal
         visible={showJoinModal}
@@ -296,7 +348,7 @@ export default function ProfileScreen() {
               value={description}
               onChangeText={setDescription}
             />
-            
+
             <Button
               title="Create Project"
               onPress={async () => {
@@ -304,7 +356,7 @@ export default function ProfileScreen() {
                   alert("Please enter a project name.");
                   return;
                 }
-      
+
                 const ownerId = auth.currentUser?.uid;
                 const projectData = {
                   projectName,
@@ -313,18 +365,18 @@ export default function ProfileScreen() {
                   members: [ownerId],
                   created_at: serverTimestamp(),
                 };
-      
+
                 try {
                   const projectRef = doc(collection(db, "projects"));
                   await setDoc(projectRef, projectData);
                   alert(`Project "${projectName}" created successfully!`);
-      
+
                   // Update the local state (if needed)
                   setProjects((prev) => [
                     ...prev,
                     { id: projectRef.id, name: projectName },
                   ]);
-      
+
                   setProjectName("");
                   setDescription("");
                   closeModal(setShowCreateModal);
@@ -347,6 +399,17 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f4f8" },
+  detailsButton: {
+    padding: 10,
+    backgroundColor: "#FF6F61",
+    borderRadius: 5,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  modalContent: {
+    fontSize: 16,
+    marginVertical: 10,
+  },
   signOutButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
