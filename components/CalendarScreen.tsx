@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { useTasks } from '@/components/TaskProvider'; // Adjust the path if necessary
+import { useTasks } from '@/contexts/TaskProvider'; // Adjust the path if necessary
 
 // Extract deadlines from tasks and assign colors based on their status
 const getMarkedDatesFromTasks = (tasks) => {

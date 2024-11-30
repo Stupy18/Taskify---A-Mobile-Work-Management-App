@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,9 +15,17 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { ThemedView } from "@/components/ThemedView";
 import { InputWithButton } from "@/components/InputWithButton";
-import { auth } from "../FirebaseConfig"; // Import Firebase auth
-import { signOut } from "firebase/auth"; // Import signOut from Firebase
-import { router } from "expo-router"; // Import router from Expo Router
+import { auth, db } from "../FirebaseConfig";
+import { signOut } from "firebase/auth";
+import { router } from "expo-router";
+import {
+  doc,
+  setDoc,
+  collection,
+  serverTimestamp,
+  deleteDoc,
+} from "firebase/firestore";
+import { useUser } from "../contexts/UserContext";
 
 export default function ProfileScreen() {
   const [firstName, setFirstName] = useState("Prenume");
@@ -26,16 +34,16 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState("email");
   const [profileImage, setProfileImage] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [projects, setProjects] = useState([]);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [projectId, setProjectId] = useState("");
   const [projectName, setProjectName] = useState("");
-  const [projects, setProjects] = useState([
-    { id: "1", name: "Project A" },
-    { id: "2", name: "Project B" },
-    { id: "3", name: "Project C" },
-  ]);
+  const [description, setDescription] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const { userProjects } = useUser();
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showProjectDetailsModal, setShowProjectDetailsModal] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(0)).current; // scale animation
   const fadeAnim = useRef(new Animated.Value(0)).current; // fade animation
@@ -114,7 +122,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     closeModal(setShowProjectsModal);
     openModal(setShowCreateModal);
   };
@@ -124,16 +132,39 @@ export default function ProfileScreen() {
     openModal(setShowJoinModal);
   };
 
+  const handleShowProjectDetails = (project) => {
+    setSelectedProject(project);
+    setShowProjectDetailsModal(true);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!selectedProject) return;
+
+    try {
+      await deleteDoc(doc(db, "projects", selectedProject.id));
+      alert("Project deleted successfully!");
+      setShowProjectDetailsModal(false);
+      // Optionally, remove from local state to reflect the deletion
+      setProjects(projects.filter((p) => p.id !== selectedProject.id));
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      alert("Failed to delete project.");
+    }
+  };
+
   const renderProjectItem = ({ item }) => (
-    <View style={styles.projectItem}>
-      <Text style={styles.projectName}>{item.name}</Text>
-    </View>
+    <TouchableOpacity onPress={() => handleShowProjectDetails(item)}>
+      <View style={styles.projectItem}>
+        <Text style={styles.projectName}>{item.projectName}</Text>
+        <Text style={styles.projectDescription}>{item.description}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
     <ThemedView style={styles.container}>
       <FlatList
-        data={projects}
+        data={userProjects}
         keyExtractor={(item) => item.id}
         renderItem={renderProjectItem}
         ListHeaderComponent={
@@ -234,6 +265,31 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* Project Details Modal */}
+      <Modal
+        visible={showProjectDetailsModal}
+        transparent={true}
+        onRequestClose={() => setShowProjectDetailsModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Project Details</Text>
+            <Text style={styles.modalContent}>
+              Name: {selectedProject?.projectName || "N/A"}
+            </Text>
+            <Text style={styles.modalContent}>
+              Description:{" "}
+              {selectedProject?.description || "No description provided."}
+            </Text>
+            <Button title="Delete Project" onPress={handleDeleteProject} />
+            <Button
+              title="Close"
+              onPress={() => setShowProjectDetailsModal(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Join Project Modal */}
       <Modal
         visible={showJoinModal}
@@ -289,11 +345,49 @@ export default function ProfileScreen() {
               value={projectName}
               onChangeText={setProjectName}
             />
+            <TextInput
+              style={[styles.input, { marginTop: 10 }]}
+              placeholder="Description (optional)"
+              multiline
+              value={description}
+              onChangeText={setDescription}
+            />
+
             <Button
               title="Create Project"
-              onPress={() => {
-                console.log("Creating project with name:", projectName);
-                closeModal(setShowCreateModal);
+              onPress={async () => {
+                if (!projectName.trim()) {
+                  alert("Please enter a project name.");
+                  return;
+                }
+
+                const ownerId = auth.currentUser?.uid;
+                const projectData = {
+                  projectName,
+                  description,
+                  ownerId,
+                  members: [ownerId],
+                  created_at: serverTimestamp(),
+                };
+
+                try {
+                  const projectRef = doc(collection(db, "projects"));
+                  await setDoc(projectRef, projectData);
+                  alert(`Project "${projectName}" created successfully!`);
+
+                  // Update the local state (if needed)
+                  setProjects((prev) => [
+                    ...prev,
+                    { id: projectRef.id, name: projectName },
+                  ]);
+
+                  setProjectName("");
+                  setDescription("");
+                  closeModal(setShowCreateModal);
+                } catch (error) {
+                  console.error("Error creating project:", error);
+                  alert("Failed to create project. Please try again.");
+                }
               }}
             />
             <Button
@@ -309,7 +403,25 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f0f4f8" },
-  
+  detailsButton: {
+    padding: 10,
+    backgroundColor: "#FF6F61",
+    borderRadius: 5,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  modalContent: {
+    fontSize: 16,
+    marginVertical: 10,
+  },
+  signOutButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+    backgroundColor: "#FF6F61",
+    alignItems: "center",
+    marginTop: 20,
+  },
   signOutButtonText: {
     color: "#fff",
     fontSize: 16,
@@ -352,6 +464,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   projectName: { fontSize: 16, color: "#333" },
+  projectDescription: { fontSize: 14, color: "#555" },
   modalBackground: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
