@@ -11,7 +11,6 @@ import {
   Animated,
   Easing,
   Alert,
-  Button,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ThemedView } from "@/components/ThemedView";
@@ -24,10 +23,14 @@ import {
   collection,
   serverTimestamp,
   deleteDoc,
+  updateDoc,
+  arrayUnion,
+  getDoc
 } from "firebase/firestore";
 import { useUser } from "../contexts/UserContext";
 
 export default function ProfileScreen() {
+  // State declarations
   const [firstName, setFirstName] = useState("Prenume");
   const [secondName, setSecondName] = useState("Nume");
   const [username, setUsername] = useState("Username");
@@ -48,6 +51,7 @@ export default function ProfileScreen() {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Handler functions
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -91,7 +95,6 @@ export default function ProfileScreen() {
       setModalVisible(false);
     });
   };
-
   const handleSave = () => {
     setEditing(false);
     Alert.alert("Success", "Profile updated successfully!");
@@ -99,8 +102,7 @@ export default function ProfileScreen() {
 
   const handleImagePicker = async () => {
     if (!editing) return;
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
       Alert.alert("Permission Required", "Please allow access to your photos to change profile picture.");
       return;
@@ -114,8 +116,7 @@ export default function ProfileScreen() {
     }
   };
 
-
-  const handleCreateProject = async () => {
+  const handleCreateProject = () => {
     closeModal(setShowProjectsModal);
     openModal(setShowCreateModal);
   };
@@ -123,6 +124,75 @@ export default function ProfileScreen() {
   const handleJoinProject = () => {
     closeModal(setShowProjectsModal);
     openModal(setShowJoinModal);
+  };
+
+  const handleCreateProjectSubmit = async () => {
+    if (!projectName.trim()) {
+      Alert.alert("Error", "Please enter a project name.");
+      return;
+    }
+  
+    const userId = auth.currentUser?.uid;
+    
+    try {
+      const projectRef = doc(collection(db, "projects"));
+      const projectData = {
+        projectName,
+        description,
+        ownerId: userId,
+        members: [userId],
+        created_at: serverTimestamp(),
+      };
+      await setDoc(projectRef, projectData);
+  
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        projects: arrayUnion(projectRef.id)
+      });
+  
+      Alert.alert("Success", `Project "${projectName}" created successfully!`);
+      setProjectName("");
+      setDescription("");
+      closeModal(setShowCreateModal);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      Alert.alert("Error", "Failed to create project. Please try again.");
+    }
+  };
+
+  const handleJoinProjectSubmit = async () => {
+    if (!projectId.trim()) {
+      Alert.alert("Error", "Please enter a project ID.");
+      return;
+    }
+
+    const userId = auth.currentUser?.uid;
+    
+    try {
+      const projectRef = doc(db, "projects", projectId);
+      const projectDoc = await getDoc(projectRef);
+      
+      if (!projectDoc.exists()) {
+        Alert.alert("Error", "Project not found");
+        return;
+      }
+  
+      await updateDoc(projectRef, {
+        members: arrayUnion(userId)
+      });
+  
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        projects: arrayUnion(projectId)
+      });
+  
+      Alert.alert("Success", "Successfully joined project!");
+      setProjectId("");
+      closeModal(setShowJoinModal);
+    } catch (error) {
+      console.error("Error joining project:", error);
+      Alert.alert("Error", "Failed to join project. Please try again.");
+    }
   };
 
   const handleShowProjectDetails = (project) => {
@@ -152,7 +222,6 @@ export default function ProfileScreen() {
       </View>
     </TouchableOpacity>
   );
-
   return (
     <ThemedView style={styles.container}>
       <FlatList
@@ -259,10 +328,8 @@ export default function ProfileScreen() {
         }
         contentContainerStyle={styles.listContent}
       />
-
-
-      {/* Projects Modal */}
-      <Modal
+       {/* Projects Modal */}
+       <Modal
         visible={showProjectsModal}
         transparent={true}
         onRequestClose={() => closeModal(setShowProjectsModal)}
@@ -293,189 +360,6 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 style={styles.projectModalButton}
                 onPress={handleJoinProject}
-              >
-                <Text style={styles.buttonText}>Join Project</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Project Details Modal */}
-      <Modal
-        visible={showProjectDetailsModal}
-        transparent={true}
-        onRequestClose={() => setShowProjectDetailsModal(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>Project Details</Text>
-            <Text style={styles.modalContent}>
-              Name: {selectedProject?.projectName || "N/A"}
-            </Text>
-            <Text style={styles.modalContent}>
-              Description:{" "}
-              {selectedProject?.description || "No description provided."}
-            </Text>
-            <Button title="Delete Project" onPress={handleDeleteProject} />
-            <Button
-              title="Close"
-              onPress={() => setShowProjectDetailsModal(false)}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Join Project Modal */}
-      <Modal
-        visible={showJoinModal}
-        transparent={true}
-        onRequestClose={() => closeModal(setShowJoinModal)}
-      >
-        <View style={styles.modalBackground}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
-            ]}
-          >
-            <Text style={styles.modalTitle}>Enter Project ID</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Project ID"
-              value={projectId}
-              onChangeText={setProjectId}
-            />
-            <Button
-              title="Join Project"
-              onPress={() => {
-                console.log("Joining project with ID:", projectId);
-                closeModal(setShowJoinModal);
-              }}
-            />
-            <Button
-              title="Close"
-              onPress={() => closeModal(setShowJoinModal)}
-            />
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Projects Modal */}
-      <Modal
-        visible={showProjectsModal}
-        transparent={true}
-        onRequestClose={() => closeModal(setShowProjectsModal)}
-      >
-        <View style={styles.modalBackground}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Project</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => closeModal(setShowProjectsModal)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleCreateProject}
-            >
-              <Text style={styles.buttonText}>Create Project</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, { marginTop: 8 }]}
-              onPress={handleJoinProject}
-            >
-              <Text style={styles.buttonText}>Join Project</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Project Details Modal */}
-      <Modal
-        visible={showProjectDetailsModal}
-        transparent={true}
-        onRequestClose={() => setShowProjectDetailsModal(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Project Details</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowProjectDetailsModal(false)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalContent}>
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailLabel}>Name:</Text>
-                <Text style={styles.detailValue}>
-                  {selectedProject?.projectName || "N/A"}
-                </Text>
-              </View>
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailLabel}>Description:</Text>
-                <Text style={styles.detailValue}>
-                  {selectedProject?.description || "No description provided."}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={handleDeleteProject}
-              >
-                <Text style={styles.buttonText}>Delete Project</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Join Project Modal */}
-      <Modal
-        visible={showJoinModal}
-        transparent={true}
-        onRequestClose={() => closeModal(setShowJoinModal)}
-      >
-        <View style={styles.modalBackground}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Join Project</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => closeModal(setShowJoinModal)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalContent}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Project ID"
-                value={projectId}
-                onChangeText={setProjectId}
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                  console.log("Joining project with ID:", projectId);
-                  closeModal(setShowJoinModal);
-                }}
               >
                 <Text style={styles.buttonText}>Join Project</Text>
               </TouchableOpacity>
@@ -524,37 +408,7 @@ export default function ProfileScreen() {
               />
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={async () => {
-                  if (!projectName.trim()) {
-                    Alert.alert("Error", "Please enter a project name.");
-                    return;
-                  }
-
-                  const ownerId = auth.currentUser?.uid;
-                  const projectData = {
-                    projectName,
-                    description,
-                    ownerId,
-                    members: [ownerId],
-                    created_at: serverTimestamp(),
-                  };
-
-                  try {
-                    const projectRef = doc(collection(db, "projects"));
-                    await setDoc(projectRef, projectData);
-                    Alert.alert("Success", `Project "${projectName}" created successfully!`);
-                    setProjects((prev) => [
-                      ...prev,
-                      { id: projectRef.id, name: projectName },
-                    ]);
-                    setProjectName("");
-                    setDescription("");
-                    closeModal(setShowCreateModal);
-                  } catch (error) {
-                    console.error("Error creating project:", error);
-                    Alert.alert("Error", "Failed to create project. Please try again.");
-                  }
-                }}
+                onPress={handleCreateProjectSubmit}
               >
                 <Text style={styles.buttonText}>Create Project</Text>
               </TouchableOpacity>
@@ -562,11 +416,96 @@ export default function ProfileScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Join Project Modal */}
+      <Modal
+        visible={showJoinModal}
+        transparent={true}
+        onRequestClose={() => closeModal(setShowJoinModal)}
+      >
+        <View style={styles.modalBackground}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Join Project</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => closeModal(setShowJoinModal)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalContent}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Project ID"
+                value={projectId}
+                onChangeText={setProjectId}
+                placeholderTextColor="#999"
+              />
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleJoinProjectSubmit}
+              >
+                <Text style={styles.buttonText}>Join Project</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Project Details Modal */}
+      <Modal
+        visible={showProjectDetailsModal}
+        transparent={true}
+        onRequestClose={() => setShowProjectDetailsModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Project Details</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowProjectDetailsModal(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalContent}>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Name:</Text>
+                <Text style={styles.detailValue}>
+                  {selectedProject?.projectName || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Description:</Text>
+                <Text style={styles.detailValue}>
+                  {selectedProject?.description || "No description provided."}
+                </Text>
+                
+              </View>
+              <View style={styles.detailsRow}>
+  <Text style={styles.detailLabel}>Project ID:</Text>
+  <Text style={styles.detailValue}>{selectedProject?.id}</Text>
+</View>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={handleDeleteProject}
+              >
+                <Text style={styles.buttonText}>Delete Project</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
-}
-
-const styles = StyleSheet.create({
+}const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: "#FFF5EC" 
@@ -780,8 +719,8 @@ const styles = StyleSheet.create({
   },
   projectModalButton: {
     backgroundColor: "#FF6F61",
-    paddingVertical: 8,  // Reduced from 12
-    paddingHorizontal: 12, // Reduced from 16
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: "center",
     width: "100%",

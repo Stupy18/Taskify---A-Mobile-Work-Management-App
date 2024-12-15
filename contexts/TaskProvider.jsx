@@ -1,87 +1,113 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from '../FirebaseConfig';
-import { collection, addDoc, updateDoc, doc, query, onSnapshot } from 'firebase/firestore';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { auth, db } from '../FirebaseConfig';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  arrayUnion,
+  getDoc,
+  serverTimestamp
+} from 'firebase/firestore';
 
 const TaskContext = createContext();
 
-export const TaskProvider = ({ children }) => {
-  const [tasks, setTasks] = useState({
-    toDo: [],
-    doing: [],
-    done: [],
-  });
+export function TaskProvider({ children }) {
+  const [currentProject, setCurrentProject] = useState(null);
+  const [tasks, setTasks] = useState({ toDo: [], doing: [], done: [] });
+  const [loading, setLoading] = useState(true);
 
-  // Function to normalize task status
-  const normalizeStatus = (status) => {
-    if (!status) return 'toDo'; // Default to 'toDo' if no status
-    const normalizedStatus = status.toLowerCase().trim(); // Normalize case and remove extra spaces
-    if (normalizedStatus === 'to do') return 'toDo';
-    if (normalizedStatus === 'doing') return 'doing';
-    if (normalizedStatus === 'done') return 'done';
-    return 'toDo'; // Default to 'toDo' for any unknown status
-  };
-
-  // Fetch tasks from Firestore
   useEffect(() => {
-    const q = query(collection(db, 'tasks'));
+    if (!currentProject) return;
+
+    const q = query(
+      collection(db, "tasks"),
+      where("projectId", "==", currentProject.id)
+    );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const tasksData = {
+      const newTasks = {
         toDo: [],
         doing: [],
-        done: [],
+        done: []
       };
 
       snapshot.docs.forEach((doc) => {
-        const task = doc.data();
-        const normalizedStatus = normalizeStatus(task.status); // Normalize the status
-        tasksData[normalizedStatus].push({ id: doc.id, ...task, commentCount: task.commentCount || 0 });
+        const task = { id: doc.id, ...doc.data() };
+        switch (task.status) {
+          case "To Do":
+            newTasks.toDo.push(task);
+            break;
+          case "Doing":
+            newTasks.doing.push(task);
+            break;
+          case "Done":
+            newTasks.done.push(task);
+            break;
+        }
       });
 
-      setTasks(tasksData);
+      setTasks(newTasks);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentProject]);
 
-  // Add a new task
   const addTask = async (taskData) => {
-    try {
-      const docRef = await addDoc(collection(db, 'tasks'), taskData);
-      console.log('Task added with ID: ', docRef.id);
-    } catch (e) {
-      console.error('Error adding task: ', e);
-    }
+    if (!currentProject) throw new Error("No project selected");
+    return await addDoc(collection(db, "tasks"), {
+      ...taskData,
+      projectId: currentProject.id,
+      createdBy: auth.currentUser.uid,
+      created_at: new Date()
+    });
   };
 
-  // Add a comment to a task
-  const addComment = async (taskId, commentText) => {
-    try {
-      const commentRef = await addDoc(collection(db, 'tasks', taskId, 'comments'), {
-        text: commentText,
-        timestamp: new Date(),
-      });
-      console.log('Comment added with ID: ', commentRef.id);
-    } catch (e) {
-      console.error('Error adding comment: ', e);
-    }
+  const updateTask = async (taskId, updates) => {
+    const taskRef = doc(db, "tasks", taskId);
+    return await updateDoc(taskRef, updates);
   };
 
-  // Update a task's status (e.g., moving to "Doing" or "Done")
-  const updateTaskStatus = async (taskId, newStatus) => {
-    try {
-      const taskRef = doc(db, 'tasks', taskId);
-      await updateDoc(taskRef, { status: newStatus });
-      console.log('Task status updated');
-    } catch (e) {
-      console.error('Error updating task status: ', e);
-    }
+  const deleteTask = async (taskId) => {
+    const taskRef = doc(db, "tasks", taskId);
+    return await deleteDoc(taskRef);
+  };
+
+  const addComment = async (taskId, text) => {
+    return await addDoc(collection(db, "tasks", taskId, "comments"), {
+      text,
+      userId: auth.currentUser.uid,
+      created_at: new Date()
+    });
+  };
+
+  const value = {
+    currentProject,
+    setCurrentProject,
+    tasks,
+    loading,
+    addTask,
+    updateTask,
+    deleteTask,
+    addComment
   };
 
   return (
-    <TaskContext.Provider value={{ tasks, addTask, addComment, updateTaskStatus }}>
+    <TaskContext.Provider value={value}>
       {children}
     </TaskContext.Provider>
   );
-};
+}
 
-export const useTasks = () => useContext(TaskContext);
+export const useTasks = () => {
+  const context = useContext(TaskContext);
+  if (!context) {
+    throw new Error("useTasks must be used within a TaskProvider");
+  }
+  return context;
+};

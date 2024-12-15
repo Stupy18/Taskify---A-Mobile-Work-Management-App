@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useTasks } from "../contexts/TaskProvider";
 import { db, auth } from "../FirebaseConfig";
+
 import {
   collection,
   addDoc,
@@ -21,8 +22,34 @@ import {
   doc,
   deleteDoc,
 } from "firebase/firestore";
+import { useProjects } from "@/contexts/ProjectProvider";
 
-const TaskCard = ({ task }) => {
+interface Task {
+  id: string;
+  title: string;
+  status: string;
+  dueDate: string;
+  commentCount?: number;
+  projectId: string;
+  projectName:string;
+  createdBy: string;
+  assignedTo: string;
+  description: string;
+}
+
+interface Project {
+  id: string;
+  projectName: string;
+  description?: string;
+  ownerId: string;
+  members: string[];
+}
+
+interface TaskCardProps {
+  task: Task;
+}
+
+const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   const { addComment } = useTasks();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -30,7 +57,7 @@ const TaskCard = ({ task }) => {
   const [commentCount, setCommentCount] = useState(task.commentCount || 0);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
 
-  const fetchComments = async (taskId) => {
+  const fetchComments = async (taskId: string) => {
     try {
       const commentsSnapshot = await getDocs(
         collection(db, "tasks", taskId, "comments")
@@ -60,7 +87,7 @@ const TaskCard = ({ task }) => {
     }
   };
 
-  const handleDeleteComment = async (commentId) => {
+  const handleDeleteComment = async (commentId: string) => {
     try {
       await deleteDoc(doc(db, "tasks", task.id, "comments", commentId));
       fetchComments(task.id);
@@ -69,7 +96,7 @@ const TaskCard = ({ task }) => {
     }
   };
 
-  const handleStatusChange = async (newStatus) => {
+  const handleStatusChange = async (newStatus: string) => {
     try {
       await updateDoc(doc(db, "tasks", task.id), {
         status: newStatus
@@ -114,90 +141,96 @@ const TaskCard = ({ task }) => {
         </View>
       </TouchableOpacity>
 
-        <Modal
-    visible={showTaskDetails}
-    transparent={true}
-    animationType="fade"
-    onRequestClose={() => setShowTaskDetails(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalCard}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Task Details</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setShowTaskDetails(false)}
-          >
-            <Text style={styles.closeButtonText}>×</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTaskTitle}>{task.title}</Text>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Due Date:</Text>
-            <Text style={styles.detailValue}>{task.dueDate}</Text>
-          </View>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Status:</Text>
-            <View style={[styles.taskBadge, styles.modalBadge]}>
-              <Text style={styles.taskBadgeText}>{task.status}</Text>
+      {/* Task Details Modal */}
+      <Modal
+        visible={showTaskDetails}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTaskDetails(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Task Details</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowTaskDetails(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Comments:</Text>
-            <Text style={styles.detailValue}>{commentCount}</Text>
-          </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTaskTitle}>{task.title}</Text>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Project:</Text>
+                <Text style={styles.detailValue}>{task.projectId}</Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Due Date:</Text>
+                <Text style={styles.detailValue}>{task.dueDate}</Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Status:</Text>
+                <View style={[styles.taskBadge, styles.modalBadge]}>
+                  <Text style={styles.taskBadgeText}>{task.status}</Text>
+                </View>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Comments:</Text>
+                <Text style={styles.detailValue}>{commentCount}</Text>
+              </View>
 
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Move to:</Text>
-            <View style={styles.statusButtons}>
-              {["To Do", "Doing", "Done"].map((status) => (
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Move to:</Text>
+                <View style={styles.statusButtons}>
+                  {["To Do", "Doing", "Done"].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusButton,
+                        task.status === status && styles.statusButtonActive,
+                      ]}
+                      onPress={() => handleStatusChange(status)}
+                      disabled={task.status === status}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          task.status === status && styles.statusButtonTextActive,
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
                 <TouchableOpacity
-                  key={status}
-                  style={[
-                    styles.statusButton,
-                    task.status === status && styles.statusButtonActive,
-                  ]}
-                  onPress={() => handleStatusChange(status)}
-                  disabled={task.status === status}
+                  style={styles.actionButton}
+                  onPress={() => {
+                    setShowTaskDetails(false);
+                    fetchComments(task.id);
+                    setShowComments(true);
+                  }}
                 >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      task.status === status && styles.statusButtonTextActive,
-                    ]}
-                  >
-                    {status}
-                  </Text>
+                  <Text style={styles.actionButtonText}>View Comments</Text>
                 </TouchableOpacity>
-              ))}
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={handleDeleteTask}
+                >
+                  <Text style={styles.actionButtonText}>Delete Task</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                setShowTaskDetails(false);
-                fetchComments(task.id);
-                setShowComments(true);
-              }}
-            >
-              <Text style={styles.actionButtonText}>View Comments</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
-              onPress={handleDeleteTask}
-            >
-              <Text style={styles.actionButtonText}>Delete Task</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      </View>
-    </View>
-  </Modal>
+      </Modal>
 
+      {/* Comments Modal */}
       <Modal
         visible={showComments}
         transparent={true}
@@ -257,7 +290,12 @@ const TaskCard = ({ task }) => {
   );
 };
 
-const Column = ({ title, data }) => {
+interface ColumnProps {
+  title: string;
+  data: Task[];
+}
+
+const Column: React.FC<ColumnProps> = ({ title, data }) => {
   return (
     <View style={styles.column}>
       <View style={styles.columnHeader}>
@@ -277,32 +315,43 @@ const Column = ({ title, data }) => {
   );
 };
 
-export default function MainScreen() {
-  const { tasks, addTask } = useTasks();
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("");
-  const [taskColumn, setTaskColumn] = useState("To Do");
-  const [modalVisible, setModalVisible] = useState(false);
+const MainScreen: React.FC = () => {
+  const { tasks, addTask, currentProject, setCurrentProject } = useTasks();
+  const { userProjects } = useProjects();
+  const [newTaskTitle, setNewTaskTitle] = useState<string>("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>("");
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const handleAddTask = async () => {
+    if (!selectedProject) {
+      Alert.alert("Error", "Please select a project first");
+      return;
+    }
+  
     if (newTaskTitle.trim() === "" || newTaskDueDate.trim() === "") {
       Alert.alert("Error", "Please provide both a title and a due date.");
       return;
     }
-
+  
+    const userId = auth.currentUser?.uid;
     const taskData = {
       title: newTaskTitle,
+      description: "",
+      status: "To Do",
+      projectId: selectedProject.id,
+      projectName:selectedProject.projectName,
+      createdBy: userId,
+      assignedTo: userId,
       dueDate: newTaskDueDate,
-      status: taskColumn,
-      comments: [],
       created_at: serverTimestamp(),
-      ownerId: auth.currentUser?.uid,
     };
-
+  
     try {
-      const taskRef = await addDoc(collection(db, "tasks"), taskData);
+      await addTask(taskData);
       setNewTaskTitle("");
       setNewTaskDueDate("");
+      setSelectedProject(null);
       setModalVisible(false);
       Alert.alert("Success", `Task "${newTaskTitle}" created successfully!`);
     } catch (error) {
@@ -334,6 +383,7 @@ export default function MainScreen() {
         </View>
       </ScrollView>
 
+      {/* New Task Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -353,6 +403,34 @@ export default function MainScreen() {
             </View>
 
             <View style={styles.modalContent}>
+              <View style={styles.selectContainer}>
+                <Text style={styles.selectLabel}>Select Project:</Text>
+                <ScrollView style={styles.projectSelect}>
+                  {userProjects.map((project) => (
+                    <TouchableOpacity
+                      key={project.id}
+                      style={[
+                        styles.projectOption,
+                        selectedProject?.id === project.id && styles.projectOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedProject(project);
+                        setCurrentProject(project);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.projectOptionText,
+                          selectedProject?.id === project.id && styles.projectOptionTextSelected,
+                        ]}
+                      >
+                        {project.projectName}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
               <TextInput
                 style={styles.input}
                 placeholder="Task Title"
@@ -370,8 +448,12 @@ export default function MainScreen() {
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={[
+                    styles.actionButton,
+                    !selectedProject && styles.actionButtonDisabled
+                  ]}
                   onPress={handleAddTask}
+                  disabled={!selectedProject}
                 >
                   <Text style={styles.actionButtonText}>Create Task</Text>
                 </TouchableOpacity>
@@ -382,7 +464,9 @@ export default function MainScreen() {
       </Modal>
     </View>
   );
-}
+};
+
+export default MainScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -479,26 +563,6 @@ const styles = StyleSheet.create({
     color: "#FF6B00",
     fontSize: 10,
     fontWeight: "500",
-  },
-  addCommentButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginLeft: 8,
-    flex: 0, // This prevents the button from stretching
-  },
-  addCommentSection: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center", // This aligns the input and button vertically
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: "#FFF5EC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: "#1A1A1A",
   },
   taskDate: {
     fontSize: 12,
@@ -654,5 +718,71 @@ const styles = StyleSheet.create({
   },
   statusButtonTextActive: {
     color: '#FFFFFF',
+  },
+  selectContainer: {
+    marginBottom: 16,
+  },
+  selectLabel: {
+    fontSize: 14,
+    color: "#666666",
+    marginBottom: 8,
+  },
+  projectSelect: {
+    maxHeight: 120,
+  },
+  projectOption: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#FFF5EC",
+    marginBottom: 8,
+  },
+  projectOptionSelected: {
+    backgroundColor: "#FF6B00",
+  },
+  projectOptionText: {
+    color: "#333333",
+    fontSize: 14,
+  },
+  projectOptionTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  actionButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+  },
+  addCommentButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginLeft: 8,
+    flex: 0,
+  },
+  commentText: {
+    color: "#333333",
+    fontSize: 14,
+  },
+  deleteCommentText: {
+    color: "#FF3B30",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  modalBadge: {
+    marginLeft: 8,
+  },
+  columnContent: {
+    paddingBottom: 8,
+  },
+  taskFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  commentCounter: {
+    marginTop: 4,
+  },
+  commentCountText: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  deleteCommentButton: {
+    alignSelf: 'flex-end',
   },
 });
