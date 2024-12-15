@@ -21,8 +21,34 @@ import {
   doc,
   deleteDoc,
 } from "firebase/firestore";
+import { useProjects } from "@/contexts/ProjectProvider";
 
-const TaskCard = ({ task }) => {
+interface Task {
+  id: string;
+  title: string;
+  status: string;
+  dueDate: string;
+  commentCount?: number;
+  projectId: string;
+  projectName: string;
+  createdBy: string;
+  assignedTo: string;
+  description: string;
+}
+
+interface Project {
+  id: string;
+  projectName: string;
+  description?: string;
+  ownerId: string;
+  members: string[];
+}
+
+interface TaskCardProps {
+  task: Task;
+}
+
+const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   const { addComment } = useTasks();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -30,7 +56,7 @@ const TaskCard = ({ task }) => {
   const [commentCount, setCommentCount] = useState(task.commentCount || 0);
   const [showTaskDetails, setShowTaskDetails] = useState(false);
 
-  const fetchComments = async (taskId) => {
+  const fetchComments = async (taskId: string) => {
     try {
       const commentsSnapshot = await getDocs(
         collection(db, "tasks", taskId, "comments")
@@ -60,7 +86,7 @@ const TaskCard = ({ task }) => {
     }
   };
 
-  const handleDeleteComment = async (commentId) => {
+  const handleDeleteComment = async (commentId: string) => {
     try {
       await deleteDoc(doc(db, "tasks", task.id, "comments", commentId));
       fetchComments(task.id);
@@ -69,7 +95,7 @@ const TaskCard = ({ task }) => {
     }
   };
 
-  const handleStatusChange = async (newStatus) => {
+  const handleStatusChange = async (newStatus: string) => {
     try {
       await updateDoc(doc(db, "tasks", task.id), {
         status: newStatus
@@ -114,90 +140,96 @@ const TaskCard = ({ task }) => {
         </View>
       </TouchableOpacity>
 
-        <Modal
-    visible={showTaskDetails}
-    transparent={true}
-    animationType="fade"
-    onRequestClose={() => setShowTaskDetails(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalCard}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Task Details</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setShowTaskDetails(false)}
-          >
-            <Text style={styles.closeButtonText}>×</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTaskTitle}>{task.title}</Text>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Due Date:</Text>
-            <Text style={styles.detailValue}>{task.dueDate}</Text>
-          </View>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Status:</Text>
-            <View style={[styles.taskBadge, styles.modalBadge]}>
-              <Text style={styles.taskBadgeText}>{task.status}</Text>
+      {/* Task Details Modal */}
+      <Modal
+        visible={showTaskDetails}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTaskDetails(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Task Details</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowTaskDetails(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Comments:</Text>
-            <Text style={styles.detailValue}>{commentCount}</Text>
-          </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTaskTitle}>{task.title}</Text>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Project:</Text>
+                <Text style={styles.detailValue}>{task.projectName}</Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Due Date:</Text>
+                <Text style={styles.detailValue}>{task.dueDate}</Text>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Status:</Text>
+                <View style={[styles.taskBadge, styles.modalBadge]}>
+                  <Text style={styles.taskBadgeText}>{task.status}</Text>
+                </View>
+              </View>
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Comments:</Text>
+                <Text style={styles.detailValue}>{commentCount}</Text>
+              </View>
 
-          <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Move to:</Text>
-            <View style={styles.statusButtons}>
-              {["To Do", "Doing", "Done"].map((status) => (
+              <View style={styles.detailsRow}>
+                <Text style={styles.detailLabel}>Move to:</Text>
+                <View style={styles.statusButtons}>
+                  {["To Do", "Doing", "Done"].map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusButton,
+                        task.status === status && styles.statusButtonActive,
+                      ]}
+                      onPress={() => handleStatusChange(status)}
+                      disabled={task.status === status}
+                    >
+                      <Text
+                        style={[
+                          styles.statusButtonText,
+                          task.status === status && styles.statusButtonTextActive,
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
                 <TouchableOpacity
-                  key={status}
-                  style={[
-                    styles.statusButton,
-                    task.status === status && styles.statusButtonActive,
-                  ]}
-                  onPress={() => handleStatusChange(status)}
-                  disabled={task.status === status}
+                  style={styles.actionButton}
+                  onPress={() => {
+                    setShowTaskDetails(false);
+                    fetchComments(task.id);
+                    setShowComments(true);
+                  }}
                 >
-                  <Text
-                    style={[
-                      styles.statusButtonText,
-                      task.status === status && styles.statusButtonTextActive,
-                    ]}
-                  >
-                    {status}
-                  </Text>
+                  <Text style={styles.actionButtonText}>View Comments</Text>
                 </TouchableOpacity>
-              ))}
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={handleDeleteTask}
+                >
+                  <Text style={styles.actionButtonText}>Delete Task</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                setShowTaskDetails(false);
-                fetchComments(task.id);
-                setShowComments(true);
-              }}
-            >
-              <Text style={styles.actionButtonText}>View Comments</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
-              onPress={handleDeleteTask}
-            >
-              <Text style={styles.actionButtonText}>Delete Task</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      </View>
-    </View>
-  </Modal>
+      </Modal>
 
+      {/* Comments Modal */}
       <Modal
         visible={showComments}
         transparent={true}
@@ -257,7 +289,12 @@ const TaskCard = ({ task }) => {
   );
 };
 
-const Column = ({ title, data }) => {
+interface ColumnProps {
+  title: string;
+  data: Task[];
+}
+
+const Column: React.FC<ColumnProps> = ({ title, data }) => {
   return (
     <View style={styles.column}>
       <View style={styles.columnHeader}>
@@ -277,30 +314,36 @@ const Column = ({ title, data }) => {
   );
 };
 
-export default function MainScreen() {
-  const { tasks, addTask } = useTasks();
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("");
-  const [taskColumn, setTaskColumn] = useState("To Do");
-  const [modalVisible, setModalVisible] = useState(false);
+const MainScreen: React.FC = () => {
+  const { tasks, addTask, currentProject, setCurrentProject } = useTasks();
+  const { userProjects } = useProjects();
+  const [newTaskTitle, setNewTaskTitle] = useState<string>("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>("");
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
 
   const handleAddTask = async () => {
+    if (!currentProject) {
+      Alert.alert("Error", "Please select a project first");
+      return;
+    }
+  
     if (newTaskTitle.trim() === "" || newTaskDueDate.trim() === "") {
       Alert.alert("Error", "Please provide both a title and a due date.");
       return;
     }
-
+  
     const taskData = {
       title: newTaskTitle,
+      description: "",
+      status: "To Do",
+      projectId: currentProject.id,
+      projectName: currentProject.projectName,
       dueDate: newTaskDueDate,
-      status: taskColumn,
-      comments: [],
-      created_at: serverTimestamp(),
-      ownerId: auth.currentUser?.uid,
     };
-
+  
     try {
-      const taskRef = await addDoc(collection(db, "tasks"), taskData);
+      await addTask(taskData);
       setNewTaskTitle("");
       setNewTaskDueDate("");
       setModalVisible(false);
@@ -311,29 +354,142 @@ export default function MainScreen() {
     }
   };
 
+  const ProjectSelector = () => {
+    const { userProjects } = useProjects();
+    const userId = auth.currentUser?.uid;
+  
+    // Filter projects to only show those where user is a member
+    const accessibleProjects = userProjects.filter(project => 
+      project.members.includes(userId)
+    );
+  
+    return (
+      <View style={styles.projectSelectorContainer}>
+        <View style={styles.projectHeader}>
+          <Text style={styles.projectHeaderTitle}>Current Project</Text>
+          <TouchableOpacity
+            style={styles.selectProjectButton}
+            onPress={() => setShowProjectSelector(true)}
+          >
+            <Text style={styles.selectProjectButtonText}>
+              {currentProject ? "Change Project" : "Select Project"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {currentProject && (
+          <View style={styles.selectedProjectCard}>
+            <Text style={styles.selectedProjectName}>{currentProject.projectName}</Text>
+            <Text style={styles.selectedProjectDescription}>
+              {currentProject.description || "No description provided"}
+            </Text>
+          </View>
+        )}
+  
+        <Modal
+          visible={showProjectSelector}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowProjectSelector(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Project</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowProjectSelector(false)}
+                >
+                  <Text style={styles.closeButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.projectList}>
+                {accessibleProjects.length === 0 ? (
+                  <View style={styles.noProjectsMessage}>
+                    <Text style={styles.noProjectsText}>
+                      You haven't joined any projects yet. Join or create a project from the Profile screen.
+                    </Text>
+                  </View>
+                ) : (
+                  accessibleProjects.map((project) => (
+                    <TouchableOpacity
+                      key={project.id}
+                      style={[
+                        styles.projectOption,
+                        currentProject?.id === project.id && styles.projectOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setCurrentProject(project);
+                        setShowProjectSelector(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.projectOptionText,
+                          currentProject?.id === project.id && styles.projectOptionTextSelected,
+                        ]}
+                      >
+                        {project.projectName}
+                      </Text>
+                      {project.description && (
+                        <Text
+                          style={[
+                            styles.projectOptionDescription,
+                            currentProject?.id === project.id && styles.projectOptionTextSelected,
+                          ]}
+                        >
+                          {project.description}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  };
   return (
     <View style={styles.container}>
+      <ProjectSelector />
+      
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Task Board</Text>
         <TouchableOpacity
-          style={styles.addTaskButton}
-          onPress={() => setModalVisible(true)}
+          style={[
+            styles.addTaskButton,
+            !currentProject && styles.addTaskButtonDisabled
+          ]}
+          onPress={() => currentProject && setModalVisible(true)}
+          disabled={!currentProject}
         >
           <Text style={styles.addTaskButtonText}>+ New Task</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.columnsScroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.columnsContainer}>
-          <Column title="To Do" data={tasks.toDo} />
-          <Column title="Doing" data={tasks.doing} />
-          <Column title="Done" data={tasks.done} />
+      {!currentProject ? (
+        <View style={styles.noProjectMessage}>
+          <Text style={styles.noProjectText}>
+            Please select a project to view and create tasks
+          </Text>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView 
+          style={styles.columnsScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.columnsContainer}>
+            <Column title="To Do" data={tasks.toDo} />
+            <Column title="Doing" data={tasks.doing} />
+            <Column title="Done" data={tasks.done} />
+          </View>
+        </ScrollView>
+      )}
 
+      {/* New Task Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -368,21 +524,21 @@ export default function MainScreen() {
                 onChangeText={setNewTaskDueDate}
               />
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={handleAddTask}
-                >
-                  <Text style={styles.actionButtonText}>Create Task</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleAddTask}
+              >
+                <Text style={styles.actionButtonText}>Create Task</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
     </View>
   );
-}
+};
+
+export default MainScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -479,26 +635,6 @@ const styles = StyleSheet.create({
     color: "#FF6B00",
     fontSize: 10,
     fontWeight: "500",
-  },
-  addCommentButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginLeft: 8,
-    flex: 0, // This prevents the button from stretching
-  },
-  addCommentSection: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center", // This aligns the input and button vertically
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: "#FFF5EC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: "#1A1A1A",
   },
   taskDate: {
     fontSize: 12,
@@ -654,5 +790,137 @@ const styles = StyleSheet.create({
   },
   statusButtonTextActive: {
     color: '#FFFFFF',
+  },
+  projectSelectorContainer: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#FF6B00",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  projectHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  projectHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#FF6B00",
+  },
+  selectProjectButton: {
+    backgroundColor: "#FF6B00",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  selectProjectButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  selectedProjectCard: {
+    backgroundColor: "#FFF5EC",
+    padding: 12,
+    borderRadius: 8,
+  },
+  selectedProjectName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333333",
+    marginBottom: 4,
+  },
+  selectedProjectDescription: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  projectList: {
+    maxHeight: 400,
+    padding: 16,
+  },
+  projectOption: {
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#FFF5EC",
+    marginBottom: 8,
+  },
+  projectOptionSelected: {
+    backgroundColor: "#FF6B00",
+  },
+  projectOptionText: {
+    color: "#333333",
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  projectOptionDescription: {
+    color: "#666666",
+    fontSize: 14,
+  },
+  projectOptionTextSelected: {
+    color: "#FFFFFF",
+  },
+  noProjectMessage: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  noProjectText: {
+    fontSize: 16,
+    color: "#666666",
+    textAlign: "center",
+  },
+  addTaskButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+  },
+  addCommentButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginLeft: 8,
+    flex: 0,
+  },
+  commentText: {
+    color: "#333333",
+    fontSize: 14,
+  },
+  deleteCommentText: {
+    color: "#FF3B30",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  modalBadge: {
+    marginLeft: 8,
+  },
+  columnContent: {
+    paddingBottom: 8,
+  },
+  taskFooter: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  commentCounter: {
+    marginTop: 4,
+  },
+  commentCountText: {
+    fontSize: 12,
+    color: "#666666",
+  },
+  deleteCommentButton: {
+    alignSelf: 'flex-end',
+  },
+  noProjectsMessage: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  noProjectsText: {
+    color: "#666666",
+    textAlign: 'center',
+    fontSize: 14,
   },
 });

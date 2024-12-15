@@ -1,87 +1,153 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from '../FirebaseConfig';
-import { collection, addDoc, updateDoc, doc, query, onSnapshot } from 'firebase/firestore';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { auth, db } from '../FirebaseConfig';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp
+} from 'firebase/firestore';
+import { useProjects } from './ProjectProvider';
 
 const TaskContext = createContext();
 
-export const TaskProvider = ({ children }) => {
-  const [tasks, setTasks] = useState({
-    toDo: [],
-    doing: [],
-    done: [],
-  });
+export function TaskProvider({ children }) {
+  const [currentProject, setCurrentProject] = useState(null);
+  const [tasks, setTasks] = useState({ toDo: [], doing: [], done: [] });
+  const [loading, setLoading] = useState(true);
+  const { userProjects } = useProjects();
 
-  // Function to normalize task status
-  const normalizeStatus = (status) => {
-    if (!status) return 'toDo'; // Default to 'toDo' if no status
-    const normalizedStatus = status.toLowerCase().trim(); // Normalize case and remove extra spaces
-    if (normalizedStatus === 'to do') return 'toDo';
-    if (normalizedStatus === 'doing') return 'doing';
-    if (normalizedStatus === 'done') return 'done';
-    return 'toDo'; // Default to 'toDo' for any unknown status
-  };
-
-  // Fetch tasks from Firestore
+  // Reset state when auth changes
   useEffect(() => {
-    const q = query(collection(db, 'tasks'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const tasksData = {
-        toDo: [],
-        doing: [],
-        done: [],
-      };
-
-      snapshot.docs.forEach((doc) => {
-        const task = doc.data();
-        const normalizedStatus = normalizeStatus(task.status); // Normalize the status
-        tasksData[normalizedStatus].push({ id: doc.id, ...task, commentCount: task.commentCount || 0 });
-      });
-
-      setTasks(tasksData);
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (!user) {
+        setCurrentProject(null);
+        setTasks({ toDo: [], doing: [], done: [] });
+        setLoading(false);
+      }
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Add a new task
-  const addTask = async (taskData) => {
-    try {
-      const docRef = await addDoc(collection(db, 'tasks'), taskData);
-      console.log('Task added with ID: ', docRef.id);
-    } catch (e) {
-      console.error('Error adding task: ', e);
+  // Handle project updates
+  useEffect(() => {
+    if (currentProject) {
+      const projectStillExists = userProjects.find(p => p.id === currentProject.id);
+      if (!projectStillExists) {
+        console.log("Current project no longer exists or accessible");
+        setCurrentProject(null);
+      } else {
+        const updatedProject = userProjects.find(p => p.id === currentProject.id);
+        console.log("Updating current project data:", updatedProject);
+        setCurrentProject(updatedProject);
+      }
     }
-  };
+  }, [userProjects]);
 
-  // Add a comment to a task
-  const addComment = async (taskId, commentText) => {
-    try {
-      const commentRef = await addDoc(collection(db, 'tasks', taskId, 'comments'), {
-        text: commentText,
-        timestamp: new Date(),
+  // Handle tasks updates
+  useEffect(() => {
+    if (!currentProject) {
+      setTasks({ toDo: [], doing: [], done: [] });
+      setLoading(false);
+      return;
+    }
+
+    console.log("Setting up tasks listener for project:", currentProject.id);
+
+    const q = query(
+      collection(db, "tasks"),
+      where("projectId", "==", currentProject.id)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log("Tasks snapshot received, count:", snapshot.docs.length);
+      const newTasks = {
+        toDo: [],
+        doing: [],
+        done: []
+      };
+
+      snapshot.docs.forEach((doc) => {
+        const task = { id: doc.id, ...doc.data() };
+        switch (task.status) {
+          case "To Do":
+            newTasks.toDo.push(task);
+            break;
+          case "Doing":
+            newTasks.doing.push(task);
+            break;
+          case "Done":
+            newTasks.done.push(task);
+            break;
+        }
       });
-      console.log('Comment added with ID: ', commentRef.id);
-    } catch (e) {
-      console.error('Error adding comment: ', e);
-    }
+
+      console.log("Processed tasks:", {
+        todo: newTasks.toDo.length,
+        doing: newTasks.doing.length,
+        done: newTasks.done.length
+      });
+      setTasks(newTasks);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [currentProject]);
+
+  const addTask = async (taskData) => {
+    if (!currentProject) throw new Error("No project selected");
+    return await addDoc(collection(db, "tasks"), {
+      ...taskData,
+      createdBy: auth.currentUser.uid,
+      created_at: serverTimestamp()
+    });
   };
 
-  // Update a task's status (e.g., moving to "Doing" or "Done")
-  const updateTaskStatus = async (taskId, newStatus) => {
-    try {
-      const taskRef = doc(db, 'tasks', taskId);
-      await updateDoc(taskRef, { status: newStatus });
-      console.log('Task status updated');
-    } catch (e) {
-      console.error('Error updating task status: ', e);
-    }
+  const updateTask = async (taskId, updates) => {
+    const taskRef = doc(db, "tasks", taskId);
+    return await updateDoc(taskRef, updates);
+  };
+
+  const deleteTask = async (taskId) => {
+    const taskRef = doc(db, "tasks", taskId);
+    return await deleteDoc(taskRef);
+  };
+
+  const addComment = async (taskId, text) => {
+    return await addDoc(collection(db, "tasks", taskId, "comments"), {
+      text,
+      userId: auth.currentUser.uid,
+      created_at: serverTimestamp()
+    });
+  };
+
+  const value = {
+    currentProject,
+    setCurrentProject,
+    tasks,
+    loading,
+    addTask,
+    updateTask,
+    deleteTask,
+    addComment
   };
 
   return (
-    <TaskContext.Provider value={{ tasks, addTask, addComment, updateTaskStatus }}>
+    <TaskContext.Provider value={value}>
       {children}
     </TaskContext.Provider>
   );
-};
+}
 
-export const useTasks = () => useContext(TaskContext);
+export const useTasks = () => {
+  const context = useContext(TaskContext);
+  if (!context) {
+    throw new Error("useTasks must be used within a TaskProvider");
+  }
+  return context;
+};
