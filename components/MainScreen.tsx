@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { useTasks } from "../contexts/TaskProvider";
 import { db, auth } from "../FirebaseConfig";
-
 import {
   collection,
   addDoc,
@@ -31,7 +30,7 @@ interface Task {
   dueDate: string;
   commentCount?: number;
   projectId: string;
-  projectName:string;
+  projectName: string;
   createdBy: string;
   assignedTo: string;
   description: string;
@@ -164,7 +163,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
               <Text style={styles.modalTaskTitle}>{task.title}</Text>
               <View style={styles.detailsRow}>
                 <Text style={styles.detailLabel}>Project:</Text>
-                <Text style={styles.detailValue}>{task.projectId}</Text>
+                <Text style={styles.detailValue}>{task.projectName}</Text>
               </View>
               <View style={styles.detailsRow}>
                 <Text style={styles.detailLabel}>Due Date:</Text>
@@ -321,10 +320,10 @@ const MainScreen: React.FC = () => {
   const [newTaskTitle, setNewTaskTitle] = useState<string>("");
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>("");
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
 
   const handleAddTask = async () => {
-    if (!selectedProject) {
+    if (!currentProject) {
       Alert.alert("Error", "Please select a project first");
       return;
     }
@@ -334,24 +333,19 @@ const MainScreen: React.FC = () => {
       return;
     }
   
-    const userId = auth.currentUser?.uid;
     const taskData = {
       title: newTaskTitle,
       description: "",
       status: "To Do",
-      projectId: selectedProject.id,
-      projectName:selectedProject.projectName,
-      createdBy: userId,
-      assignedTo: userId,
+      projectId: currentProject.id,
+      projectName: currentProject.projectName,
       dueDate: newTaskDueDate,
-      created_at: serverTimestamp(),
     };
   
     try {
       await addTask(taskData);
       setNewTaskTitle("");
       setNewTaskDueDate("");
-      setSelectedProject(null);
       setModalVisible(false);
       Alert.alert("Success", `Task "${newTaskTitle}" created successfully!`);
     } catch (error) {
@@ -360,28 +354,140 @@ const MainScreen: React.FC = () => {
     }
   };
 
+  const ProjectSelector = () => {
+    const { userProjects } = useProjects();
+    const userId = auth.currentUser?.uid;
+  
+    // Filter projects to only show those where user is a member
+    const accessibleProjects = userProjects.filter(project => 
+      project.members.includes(userId)
+    );
+  
+    return (
+      <View style={styles.projectSelectorContainer}>
+        <View style={styles.projectHeader}>
+          <Text style={styles.projectHeaderTitle}>Current Project</Text>
+          <TouchableOpacity
+            style={styles.selectProjectButton}
+            onPress={() => setShowProjectSelector(true)}
+          >
+            <Text style={styles.selectProjectButtonText}>
+              {currentProject ? "Change Project" : "Select Project"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {currentProject && (
+          <View style={styles.selectedProjectCard}>
+            <Text style={styles.selectedProjectName}>{currentProject.projectName}</Text>
+            <Text style={styles.selectedProjectDescription}>
+              {currentProject.description || "No description provided"}
+            </Text>
+          </View>
+        )}
+  
+        <Modal
+          visible={showProjectSelector}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowProjectSelector(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Project</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowProjectSelector(false)}
+                >
+                  <Text style={styles.closeButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.projectList}>
+                {accessibleProjects.length === 0 ? (
+                  <View style={styles.noProjectsMessage}>
+                    <Text style={styles.noProjectsText}>
+                      You haven't joined any projects yet. Join or create a project from the Profile screen.
+                    </Text>
+                  </View>
+                ) : (
+                  accessibleProjects.map((project) => (
+                    <TouchableOpacity
+                      key={project.id}
+                      style={[
+                        styles.projectOption,
+                        currentProject?.id === project.id && styles.projectOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setCurrentProject(project);
+                        setShowProjectSelector(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.projectOptionText,
+                          currentProject?.id === project.id && styles.projectOptionTextSelected,
+                        ]}
+                      >
+                        {project.projectName}
+                      </Text>
+                      {project.description && (
+                        <Text
+                          style={[
+                            styles.projectOptionDescription,
+                            currentProject?.id === project.id && styles.projectOptionTextSelected,
+                          ]}
+                        >
+                          {project.description}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    );
+  };
   return (
     <View style={styles.container}>
+      <ProjectSelector />
+      
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Task Board</Text>
         <TouchableOpacity
-          style={styles.addTaskButton}
-          onPress={() => setModalVisible(true)}
+          style={[
+            styles.addTaskButton,
+            !currentProject && styles.addTaskButtonDisabled
+          ]}
+          onPress={() => currentProject && setModalVisible(true)}
+          disabled={!currentProject}
         >
           <Text style={styles.addTaskButtonText}>+ New Task</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={styles.columnsScroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.columnsContainer}>
-          <Column title="To Do" data={tasks.toDo} />
-          <Column title="Doing" data={tasks.doing} />
-          <Column title="Done" data={tasks.done} />
+      {!currentProject ? (
+        <View style={styles.noProjectMessage}>
+          <Text style={styles.noProjectText}>
+            Please select a project to view and create tasks
+          </Text>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView 
+          style={styles.columnsScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.columnsContainer}>
+            <Column title="To Do" data={tasks.toDo} />
+            <Column title="Doing" data={tasks.doing} />
+            <Column title="Done" data={tasks.done} />
+          </View>
+        </ScrollView>
+      )}
 
       {/* New Task Modal */}
       <Modal
@@ -403,34 +509,6 @@ const MainScreen: React.FC = () => {
             </View>
 
             <View style={styles.modalContent}>
-              <View style={styles.selectContainer}>
-                <Text style={styles.selectLabel}>Select Project:</Text>
-                <ScrollView style={styles.projectSelect}>
-                  {userProjects.map((project) => (
-                    <TouchableOpacity
-                      key={project.id}
-                      style={[
-                        styles.projectOption,
-                        selectedProject?.id === project.id && styles.projectOptionSelected,
-                      ]}
-                      onPress={() => {
-                        setSelectedProject(project);
-                        setCurrentProject(project);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.projectOptionText,
-                          selectedProject?.id === project.id && styles.projectOptionTextSelected,
-                        ]}
-                      >
-                        {project.projectName}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-
               <TextInput
                 style={styles.input}
                 placeholder="Task Title"
@@ -446,18 +524,12 @@ const MainScreen: React.FC = () => {
                 onChangeText={setNewTaskDueDate}
               />
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    !selectedProject && styles.actionButtonDisabled
-                  ]}
-                  onPress={handleAddTask}
-                  disabled={!selectedProject}
-                >
-                  <Text style={styles.actionButtonText}>Create Task</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleAddTask}
+              >
+                <Text style={styles.actionButtonText}>Create Task</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -719,16 +791,57 @@ const styles = StyleSheet.create({
   statusButtonTextActive: {
     color: '#FFFFFF',
   },
-  selectContainer: {
+  projectSelectorContainer: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 16,
+    shadowColor: "#FF6B00",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  selectLabel: {
+  projectHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  projectHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#FF6B00",
+  },
+  selectProjectButton: {
+    backgroundColor: "#FF6B00",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  selectProjectButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  selectedProjectCard: {
+    backgroundColor: "#FFF5EC",
+    padding: 12,
+    borderRadius: 8,
+  },
+  selectedProjectName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333333",
+    marginBottom: 4,
+  },
+  selectedProjectDescription: {
     fontSize: 14,
     color: "#666666",
-    marginBottom: 8,
   },
-  projectSelect: {
-    maxHeight: 120,
+  projectList: {
+    maxHeight: 400,
+    padding: 16,
   },
   projectOption: {
     padding: 12,
@@ -741,13 +854,29 @@ const styles = StyleSheet.create({
   },
   projectOptionText: {
     color: "#333333",
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  projectOptionDescription: {
+    color: "#666666",
     fontSize: 14,
   },
   projectOptionTextSelected: {
     color: "#FFFFFF",
-    fontWeight: "600",
   },
-  actionButtonDisabled: {
+  noProjectMessage: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  noProjectText: {
+    fontSize: 16,
+    color: "#666666",
+    textAlign: "center",
+  },
+  addTaskButtonDisabled: {
     backgroundColor: "#CCCCCC",
   },
   addCommentButton: {
@@ -784,5 +913,14 @@ const styles = StyleSheet.create({
   },
   deleteCommentButton: {
     alignSelf: 'flex-end',
+  },
+  noProjectsMessage: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  noProjectsText: {
+    color: "#666666",
+    textAlign: 'center',
+    fontSize: 14,
   },
 });

@@ -31,12 +31,13 @@ import { useUser } from "../contexts/UserContext";
 
 export default function ProfileScreen() {
   // State declarations
-  const [firstName, setFirstName] = useState("Prenume");
-  const [secondName, setSecondName] = useState("Nume");
-  const [username, setUsername] = useState("Username");
-  const [email, setEmail] = useState("email");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [profileImage, setProfileImage] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState([]);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -51,13 +52,42 @@ export default function ProfileScreen() {
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Handler functions
+  // Fetch user data on component mount
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return;
+
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setFirstName(userData.firstName || "");
+        setLastName(userData.lastName || "");
+        setUsername(userData.username || "");
+        setEmail(userData.email || "");
+        if (userData.profileImage) {
+          setProfileImage(userData.profileImage);
+        }
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      Alert.alert("Error", "Failed to load user data");
+      setLoading(false);
+    }
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
       router.replace("/LoginScreen");
     } catch (error) {
       console.error("Error signing out:", error);
+      Alert.alert("Error", "Failed to sign out");
     }
   };
 
@@ -95,9 +125,26 @@ export default function ProfileScreen() {
       setModalVisible(false);
     });
   };
-  const handleSave = () => {
-    setEditing(false);
-    Alert.alert("Success", "Profile updated successfully!");
+
+  const handleSave = async () => {
+    try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return;
+
+      await updateDoc(doc(db, "users", userId), {
+        firstName,
+        lastName,
+        username,
+        updatedAt: serverTimestamp(),
+        ...(profileImage && { profileImage }),
+      });
+
+      setEditing(false);
+      Alert.alert("Success", "Profile updated successfully!");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      Alert.alert("Error", "Failed to update profile");
+    }
   };
 
   const handleImagePicker = async () => {
@@ -165,10 +212,12 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Please enter a project ID.");
       return;
     }
-
+  
     const userId = auth.currentUser?.uid;
     
     try {
+      console.log("Attempting to join project:", projectId);
+      
       const projectRef = doc(db, "projects", projectId);
       const projectDoc = await getDoc(projectRef);
       
@@ -177,14 +226,27 @@ export default function ProfileScreen() {
         return;
       }
   
+      const projectData = projectDoc.data();
+      console.log("Project data:", projectData);
+  
+      // Check if user is already a member
+      if (projectData.members?.includes(userId)) {
+        Alert.alert("Info", "You are already a member of this project");
+        return;
+      }
+  
+      // Update project members
       await updateDoc(projectRef, {
         members: arrayUnion(userId)
       });
+      console.log("Added user to project members");
   
+      // Update user's projects
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, {
         projects: arrayUnion(projectId)
       });
+      console.log("Added project to user's projects");
   
       Alert.alert("Success", "Successfully joined project!");
       setProjectId("");
@@ -194,7 +256,6 @@ export default function ProfileScreen() {
       Alert.alert("Error", "Failed to join project. Please try again.");
     }
   };
-
   const handleShowProjectDetails = (project) => {
     setSelectedProject(project);
     setShowProjectDetailsModal(true);
@@ -222,6 +283,7 @@ export default function ProfileScreen() {
       </View>
     </TouchableOpacity>
   );
+
   return (
     <ThemedView style={styles.container}>
       <FlatList
@@ -230,78 +292,85 @@ export default function ProfileScreen() {
         renderItem={renderProjectItem}
         ListHeaderComponent={
           <>
-            <Text style={styles.title}>Profile</Text>
-            <TouchableOpacity onPress={handleImagePicker} disabled={!editing}>
-              <Image
-                source={
-                  profileImage
-                    ? { uri: profileImage }
-                    : require("@/assets/images/icon.png")
-                }
-                style={styles.profileImage}
-              />
-            </TouchableOpacity>
+            {loading ? (
+              <Text style={styles.loadingText}>Loading profile...</Text>
+            ) : (
+              <>
+                <Text style={styles.title}>Profile</Text>
+                <TouchableOpacity onPress={handleImagePicker} disabled={!editing}>
+                  <Image
+                    source={
+                      profileImage
+                        ? { uri: profileImage }
+                        : require("@/assets/images/icon.png")
+                    }
+                    style={styles.profileImage}
+                  />
+                </TouchableOpacity>
 
-            <View style={styles.infoContainer}>
-              {editing ? (
-                <>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="First Name"
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    placeholderTextColor="#999"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Second Name"
-                    value={secondName}
-                    onChangeText={setSecondName}
-                    placeholderTextColor="#999"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Username"
-                    value={username}
-                    onChangeText={setUsername}
-                    placeholderTextColor="#999"
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email"
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholderTextColor="#999"
-                  />
-                </>
-              ) : (
-                <>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>First Name:</Text>
-                    <Text style={styles.infoValue}>{firstName}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Second Name:</Text>
-                    <Text style={styles.infoValue}>{secondName}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Username:</Text>
-                    <Text style={styles.infoValue}>{username}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Email:</Text>
-                    <Text style={styles.infoValue}>{email}</Text>
-                  </View>
-                </>
-              )}
-            </View>
+                <View style={styles.infoContainer}>
+                  {editing ? (
+                    <>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="First Name"
+                        value={firstName}
+                        onChangeText={setFirstName}
+                        placeholderTextColor="#999"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Last Name"
+                        value={lastName}
+                        onChangeText={setLastName}
+                        placeholderTextColor="#999"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Username"
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholderTextColor="#999"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        value={email}
+                        onChangeText={setEmail}
+                        placeholderTextColor="#999"
+                        editable={false}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>First Name:</Text>
+                        <Text style={styles.infoValue}>{firstName}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Last Name:</Text>
+                        <Text style={styles.infoValue}>{lastName}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Username:</Text>
+                        <Text style={styles.infoValue}>{username}</Text>
+                      </View>
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Email:</Text>
+                        <Text style={styles.infoValue}>{email}</Text>
+                      </View>
+                    </>
+                  )}
+                </View>
 
-            <View style={styles.projectsHeader}>
-              <Text style={styles.projectsTitle}>Projects</Text>
-              <TouchableOpacity onPress={() => openModal(setShowProjectsModal)}>
-                <Text style={styles.plusButton}>+</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.projectsHeader}>
+                  <Text style={styles.projectsTitle}>Projects</Text>
+                  <TouchableOpacity onPress={() => openModal(setShowProjectsModal)}>
+                    <Text style={styles.plusButton}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </>
         }
         ListFooterComponent={
@@ -328,8 +397,9 @@ export default function ProfileScreen() {
         }
         contentContainerStyle={styles.listContent}
       />
-       {/* Projects Modal */}
-       <Modal
+
+      {/* Projects Modal */}
+      <Modal
         visible={showProjectsModal}
         transparent={true}
         onRequestClose={() => closeModal(setShowProjectsModal)}
@@ -422,307 +492,314 @@ export default function ProfileScreen() {
         visible={showJoinModal}
         transparent={true}
         onRequestClose={() => closeModal(setShowJoinModal)}
-      >
-        <View style={styles.modalBackground}>
-          <Animated.View
-            style={[
-              styles.modalContainer,
-              { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Join Project</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => closeModal(setShowJoinModal)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalContent}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Project ID"
-                value={projectId}
-                onChangeText={setProjectId}
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={handleJoinProjectSubmit}
-              >
-                <Text style={styles.buttonText}>Join Project</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* Project Details Modal */}
-      <Modal
-        visible={showProjectDetailsModal}
-        transparent={true}
-        onRequestClose={() => setShowProjectDetailsModal(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Project Details</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowProjectDetailsModal(false)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalContent}>
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailLabel}>Name:</Text>
-                <Text style={styles.detailValue}>
-                  {selectedProject?.projectName || "N/A"}
-                </Text>
+        >
+          <View style={styles.modalBackground}>
+            <Animated.View
+              style={[
+                styles.modalContainer,
+                { transform: [{ scale: scaleAnim }], opacity: fadeAnim },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Join Project</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => closeModal(setShowJoinModal)}
+                >
+                  <Text style={styles.closeButtonText}>×</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.detailsRow}>
-                <Text style={styles.detailLabel}>Description:</Text>
-                <Text style={styles.detailValue}>
-                  {selectedProject?.description || "No description provided."}
-                </Text>
-                
+              <View style={styles.modalContent}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Project ID"
+                  value={projectId}
+                  onChangeText={setProjectId}
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={handleJoinProjectSubmit}
+                >
+                  <Text style={styles.buttonText}>Join Project</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.detailsRow}>
-  <Text style={styles.detailLabel}>Project ID:</Text>
-  <Text style={styles.detailValue}>{selectedProject?.id}</Text>
-</View>
-              <TouchableOpacity
-                style={[styles.actionButton, styles.deleteButton]}
-                onPress={handleDeleteProject}
-              >
-                <Text style={styles.buttonText}>Delete Project</Text>
-              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </Modal>
+  
+        {/* Project Details Modal */}
+        <Modal
+          visible={showProjectDetailsModal}
+          transparent={true}
+          onRequestClose={() => setShowProjectDetailsModal(false)}
+        >
+          <View style={styles.modalBackground}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Project Details</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowProjectDetailsModal(false)}
+                >
+                  <Text style={styles.closeButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalContent}>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailLabel}>Name:</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedProject?.projectName || "N/A"}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailLabel}>Description:</Text>
+                  <Text style={styles.detailValue}>
+                    {selectedProject?.description || "No description provided."}
+                  </Text>
+                </View>
+                <View style={styles.detailsRow}>
+                  <Text style={styles.detailLabel}>Project ID:</Text>
+                  <Text style={styles.detailValue}>{selectedProject?.id}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.deleteButton]}
+                  onPress={handleDeleteProject}
+                >
+                  <Text style={styles.buttonText}>Delete Project</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </ThemedView>
-  );
-}const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#FFF5EC" 
-  },
-  listContent: { 
-    padding: 20 
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#FF6F61",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignSelf: "center",
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: "#FF6F61",
-  },
-  infoContainer: { 
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: "#FF6F61",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#FFE4CC",
-  },
-  infoLabel: {
-    fontSize: 16,
-    color: "#666666",
-    fontWeight: "500",
-  },
-  infoValue: {
-    fontSize: 16,
-    color: "#333333",
-    fontWeight: "600",
-  },
-  input: {
-    backgroundColor: "#FFF5EC",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: "#333333",
-    marginBottom: 12,
-  },
-  projectsHeader: { 
-    flexDirection: "row", 
-    justifyContent: "space-between",
-    alignItems: "center", 
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  projectsTitle: { 
-    fontSize: 20, 
-    fontWeight: "bold", 
-    color: "#FF6F61" 
-  },
-  plusButton: { 
-    fontSize: 24, 
-    color: "#FFFFFF",
-    backgroundColor: "#FF6F61",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    textAlign: 'center',
-    lineHeight: 34,
-  },
-  projectItem: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#FFE4CC",
-    shadowColor: "#FF6F61",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  projectName: { 
-    fontSize: 16, 
-    fontWeight: "600",
-    color: "#333333",
-    marginBottom: 4,
-  },
-  projectDescription: { 
-    fontSize: 14, 
-    color: "#666666" 
-  },
-  modalBackground: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  modalContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    width: "100%",
-    maxHeight: "90%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#FFE4CC",
-  },
-  modalContent: {
-    padding: 16,
-  },
-  modalTitle: { 
-    fontSize: 20, 
-    fontWeight: "600", 
-    color: "#FF6F61",
-  },
-  detailsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: "#666666",
-    width: 100,
-  },
-  detailValue: {
-    fontSize: 14,
-    color: "#333333",
-    fontWeight: "500",
-    flex: 1,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-    width: "100%",
-  },
-  editButton: { 
-    backgroundColor: "#FF6F61" 
-  },
-  saveButton: { 
-    backgroundColor: "#4CAF50" 
-  },
-  actionButton: {
-    backgroundColor: "#FF6F61",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    marginVertical: 4,
-  },
-  deleteButton: {
-    backgroundColor: "#dc3545",
-    marginTop: 16,
-  },
-  signOutButton: {
-    marginTop: 12,
-    backgroundColor: "#FF6F61",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    width: "100%",
-    alignItems: "center",
-  },
-  buttonText: { 
-    color: "#FFFFFF", 
-    fontSize: 16, 
-    fontWeight: "600" 
-  },
-  closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: "#666666",
-    fontWeight: "300",
-  },
-  footerButtons: {
-    marginTop: 20,
-    paddingVertical: 20,
-    width: "100%",
-  },
-  modalButtonGroup: {
-    padding: 16,
-    gap: 8,
-  },
-  projectModalButton: {
-    backgroundColor: "#FF6F61",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    width: "100%",
-  },
-});
+        </Modal>
+      </ThemedView>
+    );
+  }
+  
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: "#FFF5EC"
+    },
+    loadingText: {
+      fontSize: 16,
+      color: "#666666",
+      textAlign: "center",
+      marginTop: 20,
+    },
+    listContent: {
+      padding: 20
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: "bold",
+      color: "#FF6F61",
+      textAlign: "center",
+      marginBottom: 20,
+    },
+    profileImage: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      alignSelf: "center",
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: "#FF6F61",
+    },
+    infoContainer: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 20,
+      shadowColor: "#FF6F61",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    infoRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "#FFE4CC",
+    },
+    infoLabel: {
+      fontSize: 16,
+      color: "#666666",
+      fontWeight: "500",
+    },
+    infoValue: {
+      fontSize: 16,
+      color: "#333333",
+      fontWeight: "600",
+    },
+    input: {
+      backgroundColor: "#FFF5EC",
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      color: "#333333",
+      marginBottom: 12,
+    },
+    projectsHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 20,
+      marginBottom: 12,
+    },
+    projectsTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: "#FF6F61"
+    },
+    plusButton: {
+      fontSize: 24,
+      color: "#FFFFFF",
+      backgroundColor: "#FF6F61",
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      textAlign: 'center',
+      lineHeight: 34,
+    },
+    projectItem: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: "#FFE4CC",
+      shadowColor: "#FF6F61",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    projectName: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: "#333333",
+      marginBottom: 4,
+    },
+    projectDescription: {
+      fontSize: 14,
+      color: "#666666"
+    },
+    modalBackground: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 16,
+    },
+    modalContainer: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 12,
+      width: "100%",
+      maxHeight: "90%",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: "#FFE4CC",
+    },
+    modalContent: {
+      padding: 16,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: "#FF6F61",
+    },
+    detailsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    detailLabel: {
+      fontSize: 14,
+      color: "#666666",
+      width: 100,
+    },
+    detailValue: {
+      fontSize: 14,
+      color: "#333333",
+      fontWeight: "500",
+      flex: 1,
+    },
+    button: {
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      alignItems: "center",
+      width: "100%",
+    },
+    editButton: {
+      backgroundColor: "#FF6F61"
+    },
+    saveButton: {
+      backgroundColor: "#4CAF50"
+    },
+    actionButton: {
+      backgroundColor: "#FF6F61",
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      alignItems: "center",
+      marginVertical: 4,
+    },
+    deleteButton: {
+      backgroundColor: "#dc3545",
+      marginTop: 16,
+    },
+    signOutButton: {
+      marginTop: 12,
+      backgroundColor: "#FF6F61",
+      paddingVertical: 12,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+      width: "100%",
+      alignItems: "center",
+    },
+    buttonText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "600"
+    },
+    closeButton: {
+      padding: 8,
+    },
+    closeButtonText: {
+      fontSize: 24,
+      color: "#666666",
+      fontWeight: "300",
+    },
+    footerButtons: {
+      marginTop: 20,
+      paddingVertical: 20,
+      width: "100%",
+    },
+    modalButtonGroup: {
+      padding: 16,
+      gap: 8,
+    },
+    projectModalButton: {
+      backgroundColor: "#FF6F61",
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      alignItems: "center",
+      width: "100%",
+    },
+  });

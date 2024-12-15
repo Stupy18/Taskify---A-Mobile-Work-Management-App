@@ -9,10 +9,9 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  arrayUnion,
-  getDoc,
   serverTimestamp
 } from 'firebase/firestore';
+import { useProjects } from './ProjectProvider';
 
 const TaskContext = createContext();
 
@@ -20,9 +19,45 @@ export function TaskProvider({ children }) {
   const [currentProject, setCurrentProject] = useState(null);
   const [tasks, setTasks] = useState({ toDo: [], doing: [], done: [] });
   const [loading, setLoading] = useState(true);
+  const { userProjects } = useProjects();
 
+  // Reset state when auth changes
   useEffect(() => {
-    if (!currentProject) return;
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (!user) {
+        setCurrentProject(null);
+        setTasks({ toDo: [], doing: [], done: [] });
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Handle project updates
+  useEffect(() => {
+    if (currentProject) {
+      const projectStillExists = userProjects.find(p => p.id === currentProject.id);
+      if (!projectStillExists) {
+        console.log("Current project no longer exists or accessible");
+        setCurrentProject(null);
+      } else {
+        const updatedProject = userProjects.find(p => p.id === currentProject.id);
+        console.log("Updating current project data:", updatedProject);
+        setCurrentProject(updatedProject);
+      }
+    }
+  }, [userProjects]);
+
+  // Handle tasks updates
+  useEffect(() => {
+    if (!currentProject) {
+      setTasks({ toDo: [], doing: [], done: [] });
+      setLoading(false);
+      return;
+    }
+
+    console.log("Setting up tasks listener for project:", currentProject.id);
 
     const q = query(
       collection(db, "tasks"),
@@ -30,6 +65,7 @@ export function TaskProvider({ children }) {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log("Tasks snapshot received, count:", snapshot.docs.length);
       const newTasks = {
         toDo: [],
         doing: [],
@@ -51,6 +87,11 @@ export function TaskProvider({ children }) {
         }
       });
 
+      console.log("Processed tasks:", {
+        todo: newTasks.toDo.length,
+        doing: newTasks.doing.length,
+        done: newTasks.done.length
+      });
       setTasks(newTasks);
       setLoading(false);
     });
@@ -62,9 +103,8 @@ export function TaskProvider({ children }) {
     if (!currentProject) throw new Error("No project selected");
     return await addDoc(collection(db, "tasks"), {
       ...taskData,
-      projectId: currentProject.id,
       createdBy: auth.currentUser.uid,
-      created_at: new Date()
+      created_at: serverTimestamp()
     });
   };
 
@@ -82,7 +122,7 @@ export function TaskProvider({ children }) {
     return await addDoc(collection(db, "tasks", taskId, "comments"), {
       text,
       userId: auth.currentUser.uid,
-      created_at: new Date()
+      created_at: serverTimestamp()
     });
   };
 

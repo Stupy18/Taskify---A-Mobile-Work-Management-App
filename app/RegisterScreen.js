@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -16,6 +17,8 @@ import { doc, setDoc, collection } from "firebase/firestore";
 import Icon from "react-native-vector-icons/Ionicons";
 
 export default function RegisterScreen() {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -30,19 +33,38 @@ export default function RegisterScreen() {
     }).start();
   }, []);
 
+  const validateInputs = () => {
+    if (!firstName.trim() || !lastName.trim() || !username.trim() || !email.trim() || !password.trim()) {
+      Alert.alert("Error", "All fields are required");
+      return false;
+    }
+    if (password.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters long");
+      return false;
+    }
+    return true;
+  };
+
   const addUser = async (user) => {
     try {
       await setDoc(doc(collection(db, "users"), user.uid), {
+        firstName: firstName,
+        lastName: lastName,
         username: username,
         email: user.email,
+        createdAt: new Date().toISOString(),
+        projects: []
       });
       console.log("User added to Firestore");
     } catch (error) {
       console.error("Error adding user: ", error);
+      throw error;
     }
   };
 
   const signUp = async () => {
+    if (!validateInputs()) return;
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -52,7 +74,7 @@ export default function RegisterScreen() {
       if (user) router.replace("/(tabs)");
     } catch (error) {
       console.log(error);
-      alert(error.message);
+      Alert.alert("Error", error.message);
     }
   };
 
@@ -62,16 +84,40 @@ export default function RegisterScreen() {
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Register to get started</Text>
+          
           <View style={styles.inputContainer}>
             <Icon name="person-outline" size={20} color="#333" style={styles.icon} />
+            <TextInput
+              style={styles.input}
+              placeholder="First Name"
+              placeholderTextColor="#777"
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Icon name="person-outline" size={20} color="#333" style={styles.icon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Last Name"
+              placeholderTextColor="#777"
+              value={lastName}
+              onChangeText={setLastName}
+            />
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Icon name="at-outline" size={20} color="#333" style={styles.icon} />
             <TextInput
               style={styles.input}
               placeholder="Username"
               placeholderTextColor="#777"
               value={username}
-              onChangeText={(text) => setUsername(text)}
+              onChangeText={setUsername}
             />
           </View>
+
           <View style={styles.inputContainer}>
             <Icon name="mail-outline" size={20} color="#333" style={styles.icon} />
             <TextInput
@@ -79,9 +125,12 @@ export default function RegisterScreen() {
               placeholder="Email"
               placeholderTextColor="#777"
               value={email}
-              onChangeText={(text) => setEmail(text)}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
+
           <View style={styles.inputContainer}>
             <Icon name="lock-closed-outline" size={20} color="#333" style={styles.icon} />
             <TextInput
@@ -89,13 +138,15 @@ export default function RegisterScreen() {
               placeholder="Password"
               placeholderTextColor="#777"
               value={password}
-              onChangeText={(text) => setPassword(text)}
+              onChangeText={setPassword}
               secureTextEntry
             />
           </View>
+
           <TouchableOpacity style={styles.button} onPress={signUp}>
             <Text style={styles.buttonText}>Register</Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => router.push("/LoginScreen")}
             style={styles.switchButton}
