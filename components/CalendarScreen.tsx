@@ -1,149 +1,155 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { useTasks } from '@/contexts/TaskProvider'; // Adjust the path if necessary
+import { useTasks } from '@/contexts/TaskProvider';
 
-// Extract deadlines from tasks and assign colors based on their status
+const formatDateString = (dateString) => {
+  const parts = dateString.split('.');
+  if (parts.length === 3) {
+    const [day, month, year] = parts.map((part) => part.padStart(2, '0'));
+    return `${year}-${month}-${day}`;
+  }
+  return null;
+};
+
+const getColorForTaskStatus = (taskStatus) => {
+  switch (taskStatus) {
+    case 'toDo': return '#f72a25';
+    case 'doing': return '#fbbc04';
+    case 'done': return '#188038';
+    default: return 'gray';
+  }
+};
+
 const getMarkedDatesFromTasks = (tasks) => {
   const markedDates = {};
 
-  // Function to assign color based on task status
-  const getColorForTaskStatus = (taskStatus) => {
-    switch (taskStatus) {
-      case 'toDo':
-        return '#f72a25'; // To Do tasks are red
-      case 'doing':
-        return '#fbbc04'; // Doing tasks are yellow
-      case 'done':
-        return '#188038'; // Done tasks are green
-      default:
-        return 'gray';
-    }
-  };
-
-  // Iterate through each task list and mark the dates with the corresponding color
   [...tasks.toDo, ...tasks.doing, ...tasks.done].forEach((task) => {
-    if (!markedDates[task.dueDate]) {
-      markedDates[task.dueDate] = {
-        dots: [],
-        marked: true,
-      };
+    const formattedDate = formatDateString(task.dueDate);
+    if (formattedDate) {
+      if (!markedDates[formattedDate]) {
+        markedDates[formattedDate] = { dots: [], marked: true };
+      }
+      const taskStatus =
+        tasks.toDo.includes(task) ? 'toDo' :
+        tasks.doing.includes(task) ? 'doing' : 'done';
+
+      markedDates[formattedDate].dots.push({ color: getColorForTaskStatus(taskStatus) });
     }
-
-    // Add the dot color corresponding to the task's status
-    const taskStatus =
-      tasks.toDo.includes(task) ? 'toDo' :
-      tasks.doing.includes(task) ? 'doing' : 'done';
-
-    markedDates[task.dueDate].dots.push({
-      color: getColorForTaskStatus(taskStatus),
-    });
   });
 
   return markedDates;
 };
-
 export default function CalendarScreen() {
-  const { tasks } = useTasks(); // Get tasks from context
+  const { tasks } = useTasks();
   const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTasks, setSelectedTasks] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  
-  const scaleAnim = useRef(new Animated.Value(0)).current; // Scale animation for modal
-  const fadeAnim = useRef(new Animated.Value(0)).current; // Fade animation for modal
 
-  // Get marked dates for the calendar
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   const markedDates = getMarkedDatesFromTasks(tasks);
 
-  // Function to handle date press and task selection
   const handleDayPress = (day) => {
-    const selectedTasks = [...tasks.toDo, ...tasks.doing, ...tasks.done].filter(
-      (task) => task.dueDate === day.dateString
+    const tasksForDate = [...tasks.toDo, ...tasks.doing, ...tasks.done].filter(
+      (task) => formatDateString(task.dueDate) === day.dateString
     );
-    if (selectedTasks.length > 0) {
-      setSelectedTask(selectedTasks[0]); // Show first task for simplicity
-      openModal();
-    } else {
-      setSelectedTask(null);
-    }
+
+    setSelectedTasks(tasksForDate);
     setSelectedDate(day.dateString);
+    openModal();
   };
 
   const openModal = () => {
     setIsModalVisible(true);
     Animated.parallel([
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 300,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
+      Animated.timing(scaleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
   };
 
   const closeModal = () => {
     Animated.parallel([
-      Animated.timing(scaleAnim, {
-        toValue: 0,
-        duration: 200,
-        easing: Easing.in(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setIsModalVisible(false);
-    });
+      Animated.timing(scaleAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.ease), useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setIsModalVisible(false));
   };
 
   return (
     <View style={styles.container}>
-      <Calendar
-        onDayPress={handleDayPress}
-        markedDates={{
-          ...markedDates,
-          [selectedDate]: { selected: true, disableTouchEvent: true, selectedDotColor: 'blue' },
-        }}
-        markingType={'multi-dot'} // Use multi-dot marking type for multiple tasks on the same day
-        theme={{
-          todayTextColor: '#00adf5',
-          arrowColor: '#00adf5',
-        }}
-      />
+      <Text style={styles.title}>Calendar</Text>
+      <View style={styles.calendarContainer}>
+        <Calendar
+          onDayPress={handleDayPress}
+          markedDates={{
+            ...markedDates,
+            [selectedDate]: { 
+              selected: true, 
+              disableTouchEvent: true, 
+              selectedColor: '#FF6F61',
+              selectedTextColor: '#FFFFFF'
+            },
+          }}
+          markingType="multi-dot"
+          theme={{
+            calendarBackground: '#FFFFFF',
+            textSectionTitleColor: '#FF6F61',
+            selectedDayBackgroundColor: '#FF6F61',
+            selectedDayTextColor: '#FFFFFF',
+            todayTextColor: '#FF6F61',
+            dayTextColor: '#333333',
+            textDisabledColor: '#CCCCCC',
+            dotColor: '#FF6F61',
+            selectedDotColor: '#FFFFFF',
+            arrowColor: '#FF6F61',
+            monthTextColor: '#FF6F61',
+            textMonthFontWeight: 'bold',
+            textDayFontSize: 14,
+            textMonthFontSize: 16,
+            textDayHeaderFontSize: 14
+          }}
+        />
+      </View>
 
-      {/* Modal for task details */}
-      <Modal
-        visible={isModalVisible}
-        transparent={true}
-        onRequestClose={closeModal} // Close modal on back press
-      >
+      <Modal visible={isModalVisible} transparent={true} onRequestClose={closeModal}>
         <View style={styles.modalBackground}>
-          <Animated.View style={[styles.modalContainer, { transform: [{ scale: scaleAnim }], opacity: fadeAnim }]}>
-            {selectedTask ? (
-              <>
-                <Text style={styles.modalTitle}>{selectedTask.title}</Text>
-                <Text>Due Date: {selectedTask.dueDate}</Text>
-                <Text>Comments:</Text>
-                {selectedTask.comments.map((comment, index) => (
-                  <Text key={index}>{comment}</Text>
+          <Animated.View style={[
+            styles.modalContainer,
+            { transform: [{ scale: scaleAnim }], opacity: fadeAnim }
+          ]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Tasks for {selectedDate}</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={closeModal}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {selectedTasks.length > 0 ? (
+              <View style={styles.tasksContainer}>
+                {selectedTasks.map((task, index) => (
+                  <View key={index} style={styles.taskCard}>
+                    <Text style={styles.taskTitle}>{task.title}</Text>
+                    <View style={styles.taskDetails}>
+                      <Text style={styles.taskDate}>Due: {task.dueDate}</Text>
+                      <View style={[
+                        styles.statusBadge,
+                        { backgroundColor: getColorForTaskStatus(
+                          tasks.toDo.includes(task) ? 'toDo' :
+                          tasks.doing.includes(task) ? 'doing' : 'done'
+                        )}
+                      ]}>
+                        <Text style={styles.statusText}>{task.status}</Text>
+                      </View>
+                    </View>
+                  </View>
                 ))}
-                <TouchableOpacity
-                  onPress={closeModal}
-                  style={styles.closeButton}
-                >
-                  <Text style={styles.closeButtonText}>Close</Text>
-                </TouchableOpacity>
-              </>
+              </View>
             ) : (
-              <Text>No task found for this date.</Text>
+              <Text style={styles.noTasksText}>No tasks scheduled for this date.</Text>
             )}
           </Animated.View>
         </View>
@@ -155,40 +161,105 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFF5EC',
+    padding: 16,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#FF6F61',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  calendarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 10,
+    shadowColor: '#FF6F61',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   modalBackground: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+    padding: 16,
   },
   modalContainer: {
-    width: '80%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    width: '100%',
+    maxHeight: '80%',
     shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE4CC',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FF6F61',
+  },
+  tasksContainer: {
+    padding: 16,
+  },
+  taskCard: {
+    backgroundColor: '#FFF5EC',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FFE4CC',
+  },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  taskDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  taskDate: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
   },
   closeButton: {
-    marginTop: 20,
-    backgroundColor: '#007bff',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
+    padding: 8,
   },
   closeButtonText: {
-    color: '#fff',
+    fontSize: 24,
+    color: '#666666',
+    fontWeight: '300',
+  },
+  noTasksText: {
+    padding: 16,
     fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
   },
 });
