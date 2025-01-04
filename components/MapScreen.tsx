@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, Animated } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useTasks } from '@/contexts/TaskProvider';
+import { useProjects } from '@/contexts/ProjectProvider';
 import { ThemedView } from '@/components/ThemedView';
+import { auth } from '@/FirebaseConfig';
 
 export default function MapScreen() {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'projects'
   const { tasks } = useTasks();
+  const { userProjects } = useProjects();
+  const userId = auth.currentUser?.uid;
 
   useEffect(() => {
     (async () => {
@@ -25,12 +30,36 @@ export default function MapScreen() {
   }, []);
 
   const renderTaskItem = ({ item }) => (
-    <View style={styles.taskItem}>
-      <Text style={styles.taskTitle}>{item.title}</Text>
-      <View style={styles.taskDetails}>
-        <Text style={styles.taskDate}>Due: {item.dueDate}</Text>
+    <View style={styles.itemCard}>
+      <Text style={styles.itemTitle}>{item.title}</Text>
+      <View style={styles.itemDetails}>
+        <Text style={styles.itemDate}>Due: {item.dueDate}</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{item.status}</Text>
+        </View>
+      </View>
+      <Text style={styles.projectName}>Project: {item.projectName}</Text>
+    </View>
+  );
+
+  const renderProjectItem = ({ item }) => (
+    <View style={styles.itemCard}>
+      <Text style={styles.itemTitle}>{item.projectName}</Text>
+      <Text style={styles.projectDescription}>
+        {item.description || 'No description provided'}
+      </Text>
+      <View style={styles.projectDetails}>
+        <View style={styles.memberCount}>
+          <Text style={styles.memberCountText}>
+            {item.members?.length || 0} members
+          </Text>
+        </View>
+        <View style={[styles.roleBadge, { 
+          backgroundColor: item.ownerId === userId ? '#188038' : '#fbbc04'
+        }]}>
+          <Text style={styles.roleText}>
+            {item.ownerId === userId ? 'Owner' : 'Member'}
+          </Text>
         </View>
       </View>
     </View>
@@ -73,10 +102,10 @@ export default function MapScreen() {
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
               }}
-              onPress={() => setShowProjectsModal(true)}
+              onPress={() => setShowModal(true)}
             >
               <Callout>
-                <Text>My Current Location</Text>
+                <Text>View My Tasks & Projects</Text>
               </Callout>
             </Marker>
           </MapView>
@@ -84,30 +113,56 @@ export default function MapScreen() {
       )}
 
       <Modal
-        visible={showProjectsModal}
+        visible={showModal}
         transparent={true}
-        onRequestClose={() => setShowProjectsModal(false)}
+        onRequestClose={() => setShowModal(false)}
         animationType="slide"
       >
         <View style={styles.modalBackground}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>My Tasks</Text>
+              <Text style={styles.modalTitle}>
+                My {activeTab === 'tasks' ? 'Tasks' : 'Projects'}
+              </Text>
               <TouchableOpacity
                 style={styles.closeButton}
-                onPress={() => setShowProjectsModal(false)}
+                onPress={() => setShowModal(false)}
               >
                 <Text style={styles.closeButtonText}>×</Text>
               </TouchableOpacity>
             </View>
 
+            <View style={styles.tabContainer}>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'tasks' && styles.activeTab]}
+                onPress={() => setActiveTab('tasks')}
+              >
+                <Text style={[styles.tabText, activeTab === 'tasks' && styles.activeTabText]}>
+                  Tasks
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, activeTab === 'projects' && styles.activeTab]}
+                onPress={() => setActiveTab('projects')}
+              >
+                <Text style={[styles.tabText, activeTab === 'projects' && styles.activeTabText]}>
+                  Projects
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <FlatList
-              data={[...tasks.toDo, ...tasks.doing, ...tasks.done]}
-              renderItem={renderTaskItem}
-              keyExtractor={(item, index) => item.id || index.toString()}
-              contentContainerStyle={styles.taskList}
+              data={activeTab === 'tasks' 
+                ? [...tasks.toDo, ...tasks.doing, ...tasks.done]
+                : userProjects
+              }
+              renderItem={activeTab === 'tasks' ? renderTaskItem : renderProjectItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>No tasks found</Text>
+                <Text style={styles.emptyText}>
+                  No {activeTab} found
+                </Text>
               }
             />
           </View>
@@ -171,18 +226,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FF6F61',
   },
-  closeButton: {
-    padding: 8,
+  tabContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
   },
-  closeButtonText: {
-    fontSize: 24,
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFF5EC',
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: '#FF6F61',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
     color: '#666666',
-    fontWeight: '300',
   },
-  taskList: {
+  activeTabText: {
+    color: '#FFFFFF',
+  },
+  listContent: {
     padding: 16,
   },
-  taskItem: {
+  itemCard: {
     backgroundColor: '#FFF5EC',
     borderRadius: 12,
     padding: 16,
@@ -190,18 +261,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FFE4CC',
   },
-  taskTitle: {
+  itemTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333333',
     marginBottom: 8,
   },
-  taskDetails: {
+  itemDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  taskDate: {
+  itemDate: {
     fontSize: 14,
     color: '#666666',
   },
@@ -214,6 +286,50 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '500',
+  },
+  projectName: {
+    fontSize: 14,
+    color: '#666666',
+    fontStyle: 'italic',
+  },
+  projectDescription: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 12,
+  },
+  projectDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  memberCount: {
+    backgroundColor: '#FFE4CC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  memberCountText: {
+    color: '#FF6F61',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  roleText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: '#666666',
+    fontWeight: '300',
   },
   emptyText: {
     textAlign: 'center',
