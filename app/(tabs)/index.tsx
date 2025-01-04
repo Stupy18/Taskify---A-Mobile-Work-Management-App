@@ -1,9 +1,10 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import MainScreen from "@/components/MainScreen";
 import CalendarScreen from "@/components/CalendarScreen";
+import MapScreen from "@/components/MapScreen";
 import TabBarIcon from "@/components/navigation/TabBarIcon";
 import React from "react";
-import { TaskProvider, useTasks } from "@/contexts/TaskProvider";
+import { TaskProvider } from "@/contexts/TaskProvider";
 import ProfileScreen from "@/components/ProfileScreen";
 import { UserProvider } from "../../contexts/UserContext";
 import { NavigationContainer } from "@react-navigation/native";
@@ -30,16 +31,6 @@ export default function App() {
                 ),
               }}
             />
-            {/* <Tab.Screen
-            name="Profile Creation"
-            component={CreateAccount}
-            options={{
-              tabBarLabel: 'Profile Creation',
-              tabBarIcon: ({ color, size }) => (
-                <TabBarIcon name="person" color={color} size={size} />  
-              ),
-            }}
-          /> */}
             <Tab.Screen
               name="Profile Screen"
               component={ProfileScreen}
@@ -57,6 +48,16 @@ export default function App() {
                 tabBarLabel: "Calendar",
                 tabBarIcon: ({ color, size }) => (
                   <TabBarIcon name="calendar" color={color} size={size} />
+                ),
+              }}
+            />
+            <Tab.Screen
+              name="Map"
+              component={MapScreen}
+              options={{
+                tabBarLabel: "Map",
+                tabBarIcon: ({ color, size }) => (
+                  <TabBarIcon name="map" color={color} size={size} />
                 ),
               }}
             />
