@@ -87,15 +87,17 @@ export default function MapScreen() {
       <View style={styles.projectHeader}>
         <Text style={styles.itemTitle}>{item.projectName}</Text>
         {item.ownerId === userId && (
-          <View style={styles.visibilityToggle}>
-            <Text style={styles.visibilityLabel}>Public</Text>
-            <Switch
-              value={item.isPublic}
-              onValueChange={() => toggleProjectVisibility(item.id, item.isPublic)}
-              trackColor={{ false: '#FFE4CC', true: '#FF6F61' }}
-              thumbColor={item.isPublic ? '#FFFFFF' : '#FF6F61'}
-            />
-          </View>
+          <TouchableOpacity 
+            style={[
+              styles.visibilityButton,
+              { backgroundColor: item.isPublic ? '#4CAF50' : '#FF3B30' }
+            ]}
+            onPress={() => toggleProjectVisibility(item.id, item.isPublic)}
+          >
+            <Text style={styles.visibilityButtonText}>
+              {item.isPublic ? '🌍 Public' : '🔒 Private'}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
       <Text style={styles.projectDescription}>
@@ -305,6 +307,7 @@ export default function MapScreen() {
 }
 
 const styles = StyleSheet.create({
+    // Main Container Styles
     container: {
       flex: 1,
       backgroundColor: '#FFF5EC',
@@ -317,22 +320,25 @@ const styles = StyleSheet.create({
       marginBottom: 20,
       textAlign: 'center',
     },
+  
+    // Map Styles
     mapContainer: {
       flex: 1,
       borderRadius: 12,
       overflow: 'hidden',
       marginBottom: 16,
+      shadowColor: '#FF6F61',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 3,
     },
     map: {
       width: '100%',
       height: '100%',
     },
-    errorText: {
-      fontSize: 16,
-      color: '#f72a25',
-      textAlign: 'center',
-      marginTop: 20,
-    },
+  
+    // Modal Styles
     modalBackground: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -344,6 +350,11 @@ const styles = StyleSheet.create({
       borderTopRightRadius: 20,
       maxHeight: '80%',
       paddingBottom: 20,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 5,
     },
     modalContent: {
       padding: 16,
@@ -361,49 +372,8 @@ const styles = StyleSheet.create({
       fontWeight: '600',
       color: '#FF6F61',
     },
-    projectHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    visibilityToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    visibilityLabel: {
-      fontSize: 14,
-      color: '#666666',
-    },
-    locationText: {
-      fontSize: 14,
-      color: '#666666',
-      marginVertical: 8,
-    },
-    projectStats: {
-      backgroundColor: '#FFF5EC',
-      padding: 12,
-      borderRadius: 8,
-      marginVertical: 12,
-    },
-    statsText: {
-      fontSize: 14,
-      color: '#666666',
-      marginVertical: 4,
-    },
-    joinButton: {
-      backgroundColor: '#FF6F61',
-      padding: 12,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginTop: 16,
-    },
-    joinButtonText: {
-      color: '#FFFFFF',
-      fontSize: 16,
-      fontWeight: '600',
-    },
+  
+    // Tab Navigation Styles
     tabContainer: {
       flexDirection: 'row',
       padding: 16,
@@ -428,6 +398,8 @@ const styles = StyleSheet.create({
     activeTabText: {
       color: '#FFFFFF',
     },
+  
+    // List Item Styles
     listContent: {
       padding: 16,
     },
@@ -438,13 +410,28 @@ const styles = StyleSheet.create({
       marginBottom: 12,
       borderWidth: 1,
       borderColor: '#FFE4CC',
+      shadowColor: '#FF6F61',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
     },
     itemTitle: {
       fontSize: 16,
       fontWeight: '600',
       color: '#333333',
       marginBottom: 8,
+      flex: 1,
     },
+    projectHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+      gap: 12,
+    },
+  
+    // Task Item Specific Styles
     itemDetails: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -465,20 +452,24 @@ const styles = StyleSheet.create({
       fontSize: 12,
       fontWeight: '500',
     },
-    projectName: {
-      fontSize: 14,
-      color: '#666666',
-      fontStyle: 'italic',
-    },
+  
+    // Project Item Specific Styles
     projectDescription: {
       fontSize: 14,
       color: '#666666',
       marginBottom: 12,
+      lineHeight: 20,
+    },
+    locationText: {
+      fontSize: 14,
+      color: '#666666',
+      marginVertical: 8,
     },
     projectDetails: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
+      marginTop: 8,
     },
     memberCount: {
       backgroundColor: '#FFE4CC',
@@ -501,6 +492,59 @@ const styles = StyleSheet.create({
       fontSize: 12,
       fontWeight: '500',
     },
+  
+    // Visibility Button Styles
+    visibilityButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    visibilityButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+  
+    // Project Stats Styles
+    projectStats: {
+      backgroundColor: '#FFF5EC',
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 12,
+    },
+    statsText: {
+      fontSize: 14,
+      color: '#666666',
+      marginVertical: 4,
+    },
+  
+    // Join Button Styles
+    joinButton: {
+      backgroundColor: '#FF6F61',
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    joinButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  
+    // Utility Styles
     closeButton: {
       padding: 8,
     },
@@ -513,5 +557,17 @@ const styles = StyleSheet.create({
       textAlign: 'center',
       color: '#666666',
       fontSize: 16,
+      marginTop: 20,
+    },
+    errorText: {
+      fontSize: 16,
+      color: '#f72a25',
+      textAlign: 'center',
+      marginTop: 20,
+    },
+    projectName: {
+      fontSize: 14,
+      color: '#666666',
+      fontStyle: 'italic',
     },
   });
