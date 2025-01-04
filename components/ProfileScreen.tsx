@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ThemedView } from "@/components/ThemedView";
+import * as Location from 'expo-location';
 import { auth, db } from "../FirebaseConfig";
 import { signOut } from "firebase/auth";
 import { router } from "expo-router";
@@ -182,6 +183,26 @@ export default function ProfileScreen() {
     const userId = auth.currentUser?.uid;
     
     try {
+      // Get current location
+      let location = null;
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status === 'granted') {
+        const currentLocation = await Location.getCurrentPositionAsync({});
+        
+        // Get address for the location
+        const [address] = await Location.reverseGeocodeAsync({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+        });
+  
+        location = {
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          address: address ? `${address.street}, ${address.city}, ${address.region}` : null,
+        };
+      }
+  
       const projectRef = doc(collection(db, "projects"));
       const projectData = {
         projectName,
@@ -189,6 +210,8 @@ export default function ProfileScreen() {
         ownerId: userId,
         members: [userId],
         created_at: serverTimestamp(),
+        isPublic: true, // Default to public
+        location: location, // Add location data
       };
       await setDoc(projectRef, projectData);
   

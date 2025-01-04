@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, Switch } from 'react-native';
 import MapView, { Marker, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useTasks } from '@/contexts/TaskProvider';
 import { useProjects } from '@/contexts/ProjectProvider';
 import { ThemedView } from '@/components/ThemedView';
-import { auth } from '@/FirebaseConfig';
+import { auth, db } from '@/FirebaseConfig';
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 
 export default function MapScreen() {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'projects'
+  const [activeTab, setActiveTab] = useState('tasks');
+  const [publicProjects, setPublicProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showProjectDetails, setShowProjectDetails] = useState(false);
   const { tasks } = useTasks();
   const { userProjects } = useProjects();
   const userId = auth.currentUser?.uid;
@@ -26,8 +30,44 @@ export default function MapScreen() {
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
+      
+      // Fetch public projects
+      fetchPublicProjects();
     })();
   }, []);
+
+  const fetchPublicProjects = async () => {
+    try {
+      const projectsRef = collection(db, 'projects');
+      const q = query(projectsRef, where('isPublic', '==', true));
+      const querySnapshot = await getDocs(q);
+      
+      const projects = [];
+      querySnapshot.forEach((doc) => {
+        projects.push({ id: doc.id, ...doc.data() });
+      });
+      
+      setPublicProjects(projects);
+    } catch (error) {
+      console.error('Error fetching public projects:', error);
+    }
+  };
+
+  const handleMarkerPress = (project) => {
+    setSelectedProject(project);
+    setShowProjectDetails(true);
+  };
+
+  const toggleProjectVisibility = async (projectId, currentValue) => {
+    try {
+      await updateDoc(doc(db, 'projects', projectId), {
+        isPublic: !currentValue
+      });
+      fetchPublicProjects(); // Refresh public projects
+    } catch (error) {
+      console.error('Error updating project visibility:', error);
+    }
+  };
 
   const renderTaskItem = ({ item }) => (
     <View style={styles.itemCard}>
@@ -44,10 +84,28 @@ export default function MapScreen() {
 
   const renderProjectItem = ({ item }) => (
     <View style={styles.itemCard}>
-      <Text style={styles.itemTitle}>{item.projectName}</Text>
+      <View style={styles.projectHeader}>
+        <Text style={styles.itemTitle}>{item.projectName}</Text>
+        {item.ownerId === userId && (
+          <View style={styles.visibilityToggle}>
+            <Text style={styles.visibilityLabel}>Public</Text>
+            <Switch
+              value={item.isPublic}
+              onValueChange={() => toggleProjectVisibility(item.id, item.isPublic)}
+              trackColor={{ false: '#FFE4CC', true: '#FF6F61' }}
+              thumbColor={item.isPublic ? '#FFFFFF' : '#FF6F61'}
+            />
+          </View>
+        )}
+      </View>
       <Text style={styles.projectDescription}>
         {item.description || 'No description provided'}
       </Text>
+      {item.location && (
+        <Text style={styles.locationText}>
+          📍 Located at: {item.location.address || 'Custom location'}
+        </Text>
+      )}
       <View style={styles.projectDetails}>
         <View style={styles.memberCount}>
           <Text style={styles.memberCountText}>
@@ -63,6 +121,58 @@ export default function MapScreen() {
         </View>
       </View>
     </View>
+  );
+
+  const ProjectDetailsModal = () => (
+    <Modal
+      visible={showProjectDetails}
+      transparent={true}
+      onRequestClose={() => setShowProjectDetails(false)}
+      animationType="slide"
+    >
+      <View style={styles.modalBackground}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{selectedProject?.projectName}</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowProjectDetails(false)}
+            >
+              <Text style={styles.closeButtonText}>×</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.modalContent}>
+            <Text style={styles.projectDescription}>
+              {selectedProject?.description || 'No description provided'}
+            </Text>
+            
+            <View style={styles.projectStats}>
+              <Text style={styles.statsText}>
+                👥 Members: {selectedProject?.members?.length || 0}
+              </Text>
+              {selectedProject?.location?.address && (
+                <Text style={styles.statsText}>
+                  📍 {selectedProject.location.address}
+                </Text>
+              )}
+            </View>
+
+            {!userProjects.find(p => p.id === selectedProject?.id) && (
+              <TouchableOpacity
+                style={styles.joinButton}
+                onPress={() => {
+                  // Implement join project logic
+                  setShowProjectDetails(false);
+                }}
+              >
+                <Text style={styles.joinButtonText}>Join Project</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 
   const getStatusColor = (status) => {
@@ -84,7 +194,7 @@ export default function MapScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <Text style={styles.title}>My Location</Text>
+      <Text style={styles.title}>Project Map</Text>
       
       {location && (
         <View style={styles.mapContainer}>
@@ -97,6 +207,7 @@ export default function MapScreen() {
               longitudeDelta: 0.0421,
             }}
           >
+            {/* User location marker */}
             <Marker
               coordinate={{
                 latitude: location.coords.latitude,
@@ -105,9 +216,28 @@ export default function MapScreen() {
               onPress={() => setShowModal(true)}
             >
               <Callout>
-                <Text>View My Tasks & Projects</Text>
+                <Text>My Location</Text>
               </Callout>
             </Marker>
+
+            {/* Project markers */}
+            {publicProjects.map((project) => (
+              project.location && (
+                <Marker
+                  key={project.id}
+                  coordinate={{
+                    latitude: project.location.latitude,
+                    longitude: project.location.longitude,
+                  }}
+                  pinColor="#FF6F61"
+                  onPress={() => handleMarkerPress(project)}
+                >
+                  <Callout>
+                    <Text>{project.projectName}</Text>
+                  </Callout>
+                </Marker>
+              )
+            ))}
           </MapView>
         </View>
       )}
@@ -168,172 +298,220 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
+
+      <ProjectDetailsModal />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFF5EC',
-    padding: 16,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#FF6F61',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  mapContainer: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#f72a25',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  modalBackground: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFE4CC',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#FF6F61',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#FFF5EC',
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#FF6F61',
-  },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#666666',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
-  listContent: {
-    padding: 16,
-  },
-  itemCard: {
-    backgroundColor: '#FFF5EC',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FFE4CC',
-  },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 8,
-  },
-  itemDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  itemDate: {
-    fontSize: 14,
-    color: '#666666',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  projectName: {
-    fontSize: 14,
-    color: '#666666',
-    fontStyle: 'italic',
-  },
-  projectDescription: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 12,
-  },
-  projectDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  memberCount: {
-    backgroundColor: '#FFE4CC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  memberCountText: {
-    color: '#FF6F61',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  roleText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 24,
-    color: '#666666',
-    fontWeight: '300',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#666666',
-    fontSize: 16,
-  },
-});
+    container: {
+      flex: 1,
+      backgroundColor: '#FFF5EC',
+      padding: 16,
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: 'bold',
+      color: '#FF6F61',
+      marginBottom: 20,
+      textAlign: 'center',
+    },
+    mapContainer: {
+      flex: 1,
+      borderRadius: 12,
+      overflow: 'hidden',
+      marginBottom: 16,
+    },
+    map: {
+      width: '100%',
+      height: '100%',
+    },
+    errorText: {
+      fontSize: 16,
+      color: '#f72a25',
+      textAlign: 'center',
+      marginTop: 20,
+    },
+    modalBackground: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContainer: {
+      backgroundColor: '#FFFFFF',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: '80%',
+      paddingBottom: 20,
+    },
+    modalContent: {
+      padding: 16,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#FFE4CC',
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '600',
+      color: '#FF6F61',
+    },
+    projectHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    visibilityToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    visibilityLabel: {
+      fontSize: 14,
+      color: '#666666',
+    },
+    locationText: {
+      fontSize: 14,
+      color: '#666666',
+      marginVertical: 8,
+    },
+    projectStats: {
+      backgroundColor: '#FFF5EC',
+      padding: 12,
+      borderRadius: 8,
+      marginVertical: 12,
+    },
+    statsText: {
+      fontSize: 14,
+      color: '#666666',
+      marginVertical: 4,
+    },
+    joinButton: {
+      backgroundColor: '#FF6F61',
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    joinButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    tabContainer: {
+      flexDirection: 'row',
+      padding: 16,
+      gap: 12,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      backgroundColor: '#FFF5EC',
+      alignItems: 'center',
+    },
+    activeTab: {
+      backgroundColor: '#FF6F61',
+    },
+    tabText: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: '#666666',
+    },
+    activeTabText: {
+      color: '#FFFFFF',
+    },
+    listContent: {
+      padding: 16,
+    },
+    itemCard: {
+      backgroundColor: '#FFF5EC',
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: '#FFE4CC',
+    },
+    itemTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#333333',
+      marginBottom: 8,
+    },
+    itemDetails: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    itemDate: {
+      fontSize: 14,
+      color: '#666666',
+    },
+    statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    statusText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    projectName: {
+      fontSize: 14,
+      color: '#666666',
+      fontStyle: 'italic',
+    },
+    projectDescription: {
+      fontSize: 14,
+      color: '#666666',
+      marginBottom: 12,
+    },
+    projectDetails: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    memberCount: {
+      backgroundColor: '#FFE4CC',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    memberCountText: {
+      color: '#FF6F61',
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    roleBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    roleText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    closeButton: {
+      padding: 8,
+    },
+    closeButtonText: {
+      fontSize: 24,
+      color: '#666666',
+      fontWeight: '300',
+    },
+    emptyText: {
+      textAlign: 'center',
+      color: '#666666',
+      fontSize: 16,
+    },
+  });
