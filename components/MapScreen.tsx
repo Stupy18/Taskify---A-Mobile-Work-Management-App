@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
-  Switch,
 } from "react-native";
 import MapView, { Marker, Callout } from "react-native-maps";
 import * as Location from "expo-location";
+import Supercluster from "supercluster";
 import { useTasks } from "@/contexts/TaskProvider";
 import { useProjects } from "@/contexts/ProjectProvider";
 import { ThemedView } from "@/components/ThemedView";
@@ -22,6 +22,142 @@ import {
   updateDoc,
   doc,
 } from "firebase/firestore";
+
+const ProjectMarkers = ({ projects, onMarkerPress }) => {
+  const [clusters, setClusters] = useState([]);
+  const [showClusterModal, setShowClusterModal] = useState(false);
+  const [selectedClusterProjects, setSelectedClusterProjects] = useState([]);
+  const supercluster = useRef(null);
+
+  useEffect(() => {
+    if (projects.length > 0) {
+      // Initialize Supercluster
+      supercluster.current = new Supercluster({
+        radius: 40,
+        maxZoom: 16,
+      });
+
+      // Format projects for supercluster
+      const points = projects
+        .filter((p) => p.location)
+        .map((project) => ({
+          type: "Feature",
+          properties: { cluster: false, projectId: project.id, ...project },
+          geometry: {
+            type: "Point",
+            coordinates: [
+              project.location.longitude,
+              project.location.latitude,
+            ],
+          },
+        }));
+
+      supercluster.current.load(points);
+      const clusters = supercluster.current.getClusters(
+        [-180, -85, 180, 85],
+        2
+      );
+      setClusters(clusters);
+    }
+  }, [projects]);
+
+  const handleClusterPress = (cluster) => {
+    const clusterLeaves = supercluster.current.getLeaves(cluster.id, Infinity);
+    const clusterProjects = clusterLeaves.map((leaf) => leaf.properties);
+    setSelectedClusterProjects(clusterProjects);
+    setShowClusterModal(true);
+  };
+
+  const renderClusterMarker = (cluster) => {
+    const [longitude, latitude] = cluster.geometry.coordinates;
+    const points = cluster.properties.point_count;
+    const clusterId = `cluster-${cluster.id}`;
+  
+    return (
+      <Marker
+        key={clusterId}
+        identifier={clusterId}
+        coordinate={{ latitude, longitude }}
+        onPress={() => handleClusterPress(cluster)}
+        title={`${points} Projects`}
+        description="Tap to view projects"
+      />
+    );
+  };
+
+  const renderClusterProjectItem = ({ item }) => (
+    <View style={styles.clusterProjectItem}>
+      <Text style={styles.projectName}>{item.projectName}</Text>
+      <View style={styles.projectInfo}>
+        <Text style={styles.projectMembers}>
+          👥 {item.members?.length || 0} members
+        </Text>
+        <TouchableOpacity
+          style={styles.viewButton}
+          onPress={() => {
+            setShowClusterModal(false);
+            onMarkerPress(item);
+          }}
+        >
+          <Text style={styles.viewButtonText}>View</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderProjectMarker = (project) => (
+    <Marker
+      key={project.properties.projectId}
+      identifier={`project-${project.properties.projectId}`}
+      coordinate={{
+        latitude: project.geometry.coordinates[1],
+        longitude: project.geometry.coordinates[0],
+      }}
+      onPress={() => onMarkerPress(project.properties)}
+      title={project.properties.projectName}
+      description={`${project.properties.members?.length || 0} members`}
+    />
+  );
+
+  return (
+    <>
+      {clusters.map((cluster) => {
+        if (cluster.properties.cluster) {
+          return renderClusterMarker(cluster);
+        } else {
+          return renderProjectMarker(cluster);
+        }
+      })}
+
+      <Modal
+        visible={showClusterModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowClusterModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Projects in this area</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowClusterModal(false)}
+              >
+                <Text style={styles.closeButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={selectedClusterProjects}
+              renderItem={renderClusterProjectItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.clusterProjectsList}
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
 
 export default function MapScreen() {
   const [location, setLocation] = useState(null);
@@ -242,11 +378,13 @@ export default function MapScreen() {
           >
             {/* User location marker */}
             <Marker
+              identifier="user-location"
               coordinate={{
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
               }}
               onPress={() => setShowModal(true)}
+              tracksViewChanges={false}
             >
               <View style={styles.userMarker}>
                 <View style={styles.userDot} />
@@ -259,38 +397,11 @@ export default function MapScreen() {
               </Callout>
             </Marker>
 
-            {/* Project markers */}
-            {publicProjects.map(
-              (project) =>
-                project.location && (
-                    <Marker
-                    key={project.id}
-                    coordinate={{
-                      latitude: project.location.latitude,
-                      longitude: project.location.longitude,
-                    }}
-                    onPress={() => handleMarkerPress(project)}
-                  >
-                    <View style={styles.projectMarker}>
-                      <Text style={styles.projectMarkerEmoji}>📍</Text>
-                      {/* Optional: Show number of members */}
-                      <View style={styles.memberIndicator}>
-                        <Text style={styles.memberCount}>
-                          {project.members?.length || 0}
-                        </Text>
-                      </View>
-                    </View>
-                    <Callout>
-                      <View style={styles.calloutContent}>
-                        <Text style={styles.calloutTitle}>{project.projectName}</Text>
-                        <Text style={styles.calloutSubtitle}>
-                          {project.members?.length || 0} members
-                        </Text>
-                      </View>
-                    </Callout>
-                  </Marker>
-                )
-            )}
+            {/* Clustered project markers */}
+            <ProjectMarkers
+              projects={publicProjects}
+              onMarkerPress={handleMarkerPress}
+            />
           </MapView>
         </View>
       )}
@@ -636,18 +747,18 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
 
-   // User Location Marker Styles
-   userMarker: {
-    alignItems: 'center',
+  // User Location Marker Styles
+  userMarker: {
+    alignItems: "center",
   },
   userDot: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#4285F4',
+    backgroundColor: "#4285F4",
     borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 2,
@@ -656,21 +767,21 @@ const styles = StyleSheet.create({
   userMarkerTriangle: {
     width: 0,
     height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
+    backgroundColor: "transparent",
+    borderStyle: "solid",
     borderLeftWidth: 6,
     borderRightWidth: 6,
     borderTopWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#4285F4',
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#4285F4",
     transform: [{ translateY: -1 }],
   },
 
   // Project Marker Styles
   projectMarker: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   projectMarkerEmoji: {
     fontSize: 40,
@@ -678,24 +789,24 @@ const styles = StyleSheet.create({
     marginBottom: -8, // Adjust the bottom point of the pin
   },
   memberIndicator: {
-    position: 'absolute',
+    position: "absolute",
     top: -4,
     right: -4,
-    backgroundColor: '#FF6F61',
+    backgroundColor: "#FF6F61",
     borderRadius: 12,
     minWidth: 24,
     height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 2,
     elevation: 5,
   },
-  
+
   // Callout Styles
   calloutContent: {
     padding: 8,
@@ -703,12 +814,90 @@ const styles = StyleSheet.create({
   },
   calloutTitle: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333333',
+    fontWeight: "600",
+    color: "#333333",
     marginBottom: 4,
   },
   calloutSubtitle: {
     fontSize: 12,
-    color: '#666666',
+    color: "#666666",
+  },
+
+  // Cluster Marker Styles
+  clusterContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  smallCluster: {
+    borderColor: "#FF6F61",
+  },
+  mediumCluster: {
+    borderColor: "#FF8F61",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  largeCluster: {
+    borderColor: "#FFA561",
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+  },
+  clusterText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#333333",
+    marginBottom: 2,
+  },
+  clusterEmoji: {
+    fontSize: 16,
+  },
+  clusterCallout: {
+    padding: 8,
+    minWidth: 150,
+  },
+
+  // Cluster Project List Styles
+  clusterProjectsList: {
+    padding: 16,
+  },
+  clusterProjectItem: {
+    backgroundColor: "#FFF5EC",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FFE4CC",
+  },
+  projectInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  projectMembers: {
+    fontSize: 14,
+    color: "#666666",
+  },
+  viewButton: {
+    backgroundColor: "#FF6F61",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  viewButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
