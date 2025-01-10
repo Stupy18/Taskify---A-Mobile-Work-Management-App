@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useImperativeHandle } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   Modal,
   FlatList,
 } from "react-native";
-import MapView, { Marker, Callout } from "react-native-maps";
+import MapView, { Marker, Callout, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import Supercluster from "supercluster";
 import { useTasks } from "@/contexts/TaskProvider";
@@ -21,30 +21,74 @@ import {
   getDocs,
   updateDoc,
   doc,
+  onSnapshot,
 } from "firebase/firestore";
 
-const ProjectMarkers = ({ projects, onMarkerPress }) => {
-  const [clusters, setClusters] = useState([]);
-  const [showClusterModal, setShowClusterModal] = useState(false);
-  const [selectedClusterProjects, setSelectedClusterProjects] = useState([]);
-  const supercluster = useRef(null);
+interface Project {
+  id: string;
+  projectName: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+  };
+  members?: string[];
+  [key: string]: any;
+}
 
-  useEffect(() => {
-    if (projects.length > 0) {
-      // Initialize Supercluster
+interface ProjectMarkersProps {
+  projects: Project[];
+  onMarkerPress: (project: Project) => void;
+  mapRef: React.RefObject<any>;
+}
+
+interface ProjectMarkersRef {
+  handleRegionChange: (region: {
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  }) => void;
+}
+
+interface ClusterFeature {
+  type: 'Feature';
+  id?: number;
+  properties: {
+    cluster?: boolean;
+    cluster_id?: number;
+    point_count?: number;
+    projectId?: string;
+  } & Partial<Project>;
+  geometry: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+}
+
+const ProjectMarkers = React.forwardRef<ProjectMarkersRef, ProjectMarkersProps>(
+  ({ projects, onMarkerPress, mapRef }, ref) => {
+    const [clusters, setClusters] = useState<ClusterFeature[]>([]);
+    const [zoom, setZoom] = useState(10);
+    const supercluster = useRef<Supercluster | null>(null);
+
+    const initializeSupercluster = () => {
+      if (!projects?.length) return;
+
       supercluster.current = new Supercluster({
         radius: 40,
-        maxZoom: 16,
+        maxZoom: 20,
+        minZoom: 1,
+        minPoints: 2,
       });
 
-      // Format projects for supercluster
       const points = projects
-        .filter((p) => p.location)
-        .map((project) => ({
-          type: "Feature",
+        .filter(p => p.location)
+        .map(project => ({
+          type: 'Feature' as const,
           properties: { cluster: false, projectId: project.id, ...project },
           geometry: {
-            type: "Point",
+            type: 'Point' as const,
             coordinates: [
               project.location.longitude,
               project.location.latitude,
@@ -53,111 +97,101 @@ const ProjectMarkers = ({ projects, onMarkerPress }) => {
         }));
 
       supercluster.current.load(points);
-      const clusters = supercluster.current.getClusters(
+      updateClusters(zoom);
+    };
+
+    useEffect(() => {
+      initializeSupercluster();
+    }, [projects]);
+
+    const calculateZoom = (longitudeDelta: number): number => {
+      return Math.round(Math.log(360 / longitudeDelta) / Math.LN2);
+    };
+
+    const updateClusters = (currentZoom: number) => {
+      if (!supercluster.current) return;
+      const newClusters = supercluster.current.getClusters(
         [-180, -85, 180, 85],
-        2
-      );
-      setClusters(clusters);
-    }
-  }, [projects]);
+        Math.floor(currentZoom)
+      ) as ClusterFeature[];
+      setClusters(newClusters);
+    };
 
-  const handleClusterPress = (cluster) => {
-    const clusterLeaves = supercluster.current.getLeaves(cluster.id, Infinity);
-    const clusterProjects = clusterLeaves.map((leaf) => leaf.properties);
-    setSelectedClusterProjects(clusterProjects);
-    setShowClusterModal(true);
-  };
-
-  const renderClusterMarker = (cluster) => {
-    const [longitude, latitude] = cluster.geometry.coordinates;
-    const points = cluster.properties.point_count;
-    const clusterId = `cluster-${cluster.id}`;
-  
-    return (
-      <Marker
-        key={clusterId}
-        identifier={clusterId}
-        coordinate={{ latitude, longitude }}
-        onPress={() => handleClusterPress(cluster)}
-        title={`${points} Projects`}
-        description="Tap to view projects"
-      />
-    );
-  };
-
-  const renderClusterProjectItem = ({ item }) => (
-    <View style={styles.clusterProjectItem}>
-      <Text style={styles.projectName}>{item.projectName}</Text>
-      <View style={styles.projectInfo}>
-        <Text style={styles.projectMembers}>
-          👥 {item.members?.length || 0} members
-        </Text>
-        <TouchableOpacity
-          style={styles.viewButton}
-          onPress={() => {
-            setShowClusterModal(false);
-            onMarkerPress(item);
-          }}
-        >
-          <Text style={styles.viewButtonText}>View</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderProjectMarker = (project) => (
-    <Marker
-      key={project.properties.projectId}
-      identifier={`project-${project.properties.projectId}`}
-      coordinate={{
-        latitude: project.geometry.coordinates[1],
-        longitude: project.geometry.coordinates[0],
-      }}
-      onPress={() => onMarkerPress(project.properties)}
-      title={project.properties.projectName}
-      description={`${project.properties.members?.length || 0} members`}
-    />
-  );
-
-  return (
-    <>
-      {clusters.map((cluster) => {
-        if (cluster.properties.cluster) {
-          return renderClusterMarker(cluster);
-        } else {
-          return renderProjectMarker(cluster);
+    useImperativeHandle(ref, () => ({
+      handleRegionChange: (region) => {
+        const newZoom = calculateZoom(region.longitudeDelta);
+        if (newZoom !== zoom) {
+          setZoom(newZoom);
+          updateClusters(newZoom);
         }
-      })}
+      }
+    }));
 
-      <Modal
-        visible={showClusterModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowClusterModal(false)}
-      >
-        <View style={styles.modalBackground}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Projects in this area</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowClusterModal(false)}
-              >
-                <Text style={styles.closeButtonText}>×</Text>
-              </TouchableOpacity>
+    const handleClusterPress = (cluster: ClusterFeature) => {
+      if (!cluster.id || !supercluster.current) return;
+
+      const expansionZoom = Math.min(
+        supercluster.current.getClusterExpansionZoom(cluster.id),
+        20
+      );
+
+      const [longitude, latitude] = cluster.geometry.coordinates;
+      const newRegion = {
+        latitude,
+        longitude,
+        latitudeDelta: 360 / Math.pow(2, expansionZoom + 1),
+        longitudeDelta: 360 / Math.pow(2, expansionZoom + 1),
+      };
+
+      mapRef.current?.animateToRegion(newRegion, 1000);
+    };
+
+    const renderMarker = (point: ClusterFeature) => {
+      const [longitude, latitude] = point.geometry.coordinates;
+      
+      if (point.properties.cluster) {
+        const pointCount = point.properties.point_count || 0;
+        return (
+          <Marker
+            key={`cluster-${point.id}`}
+            coordinate={{ latitude, longitude }}
+            onPress={() => handleClusterPress(point)}
+            tracksViewChanges={false}
+          >
+            <View style={[
+              styles.clusterContainer,
+              pointCount < 10 ? styles.smallCluster :
+              pointCount < 20 ? styles.mediumCluster :
+              styles.largeCluster
+            ]}>
+              <Text style={styles.clusterText}>{pointCount}</Text>
             </View>
-            <FlatList
-              data={selectedClusterProjects}
-              renderItem={renderClusterProjectItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.clusterProjectsList}
-            />
+          </Marker>
+        );
+      }
+
+      return (
+        <Marker
+          key={`project-${point.properties.projectId}`}
+          coordinate={{ latitude, longitude }}
+          onPress={() => onMarkerPress(point.properties as Project)}
+          tracksViewChanges={false}
+        >
+          <View style={styles.projectMarker}>
+            <Text style={styles.markerText}>📍</Text>
           </View>
-        </View>
-      </Modal>
-    </>
-  );
-};
+        </Marker>
+      );
+    };
+
+    return (
+      <>
+        {clusters.map(point => renderMarker(point))}
+      </>
+    );
+  }
+);
+
 
 export default function MapScreen() {
   const [location, setLocation] = useState(null);
@@ -167,6 +201,8 @@ export default function MapScreen() {
   const [publicProjects, setPublicProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [showProjectDetails, setShowProjectDetails] = useState(false);
+  const mapRef = useRef<MapView>(null);
+  const projectMarkersRef = useRef<{ handleRegionChange: (region: Region) => void }>(null);
   const { tasks } = useTasks();
   const { userProjects } = useProjects();
   const userId = auth.currentUser?.uid;
@@ -181,28 +217,32 @@ export default function MapScreen() {
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
-
-      // Fetch public projects
-      fetchPublicProjects();
     })();
   }, []);
 
-  const fetchPublicProjects = async () => {
-    try {
-      const projectsRef = collection(db, "projects");
-      const q = query(projectsRef, where("isPublic", "==", true));
-      const querySnapshot = await getDocs(q);
+  useEffect(() => {
+    // Create a query for public projects
+    const projectsRef = collection(db, "projects");
+    const q = query(projectsRef, where("isPublic", "==", true));
 
-      const projects = [];
-      querySnapshot.forEach((doc) => {
-        projects.push({ id: doc.id, ...doc.data() });
-      });
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const projects = [];
+        snapshot.forEach((doc) => {
+          projects.push({ id: doc.id, ...doc.data() });
+        });
+        setPublicProjects(projects);
+      },
+      (error) => {
+        console.error("Error listening to public projects:", error);
+      }
+    );
 
-      setPublicProjects(projects);
-    } catch (error) {
-      console.error("Error fetching public projects:", error);
-    }
-  };
+    // Clean up listener on unmount
+    return () => unsubscribe();
+  }, []);
 
   const handleMarkerPress = (project) => {
     setSelectedProject(project);
@@ -214,7 +254,7 @@ export default function MapScreen() {
       await updateDoc(doc(db, "projects", projectId), {
         isPublic: !currentValue,
       });
-      fetchPublicProjects(); // Refresh public projects
+      // No need to call fetchPublicProjects() anymore as the listener will update automatically
     } catch (error) {
       console.error("Error updating project visibility:", error);
     }
@@ -368,12 +408,18 @@ export default function MapScreen() {
       {location && (
         <View style={styles.mapContainer}>
           <MapView
+            ref={mapRef}
             style={styles.map}
             initialRegion={{
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
               latitudeDelta: 0.0922,
               longitudeDelta: 0.0421,
+            }}
+            onRegionChangeComplete={(region) => {
+              if (mapRef.current) {
+                projectMarkersRef.current?.handleRegionChange(region);
+              }
             }}
           >
             {/* User location marker */}
@@ -397,10 +443,11 @@ export default function MapScreen() {
               </Callout>
             </Marker>
 
-            {/* Clustered project markers */}
             <ProjectMarkers
+              ref={projectMarkersRef}
               projects={publicProjects}
               onMarkerPress={handleMarkerPress}
+              mapRef={mapRef}
             />
           </MapView>
         </View>
@@ -899,5 +946,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "500",
+  },
+  projectLocation: {
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 4,
+  },
+  markerText: {
+    fontSize: 24,
   },
 });
