@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
+  Alert,
 } from "react-native";
 import MapView, { Marker, Callout, Region } from "react-native-maps";
 import * as Location from "expo-location";
@@ -99,6 +100,8 @@ const ProjectMarkers = React.forwardRef<ProjectMarkersRef, ProjectMarkersProps>(
       supercluster.current.load(points);
       updateClusters(zoom);
     };
+
+    
 
     useEffect(() => {
       initializeSupercluster();
@@ -244,6 +247,35 @@ export default function MapScreen() {
     return () => unsubscribe();
   }, []);
 
+  const handleJoinProject = async () => {
+    if (!selectedProject || !userId) return;
+  
+    try {
+      // Get the current project document
+      const projectRef = doc(db, "projects", selectedProject.id);
+      
+      // Add the current user to the members array if they're not already a member
+      await updateDoc(projectRef, {
+        members: [...(selectedProject.members || []), userId]
+      });
+  
+      // Close the modal
+      setShowProjectDetails(false);
+      
+      // Show success message
+      Alert.alert(
+        "Success",
+        `You have successfully joined ${selectedProject.projectName}`
+      );
+    } catch (error) {
+      console.error("Error joining project:", error);
+      Alert.alert(
+        "Error",
+        "Failed to join project. Please try again."
+      );
+    }
+  };
+
   const handleMarkerPress = (project) => {
     setSelectedProject(project);
     setShowProjectDetails(true);
@@ -363,13 +395,10 @@ export default function MapScreen() {
               )}
             </View>
 
-            {!userProjects.find((p) => p.id === selectedProject?.id) && (
+                        {!userProjects.find((p) => p.id === selectedProject?.id) && (
               <TouchableOpacity
                 style={styles.joinButton}
-                onPress={() => {
-                  // Implement join project logic
-                  setShowProjectDetails(false);
-                }}
+                onPress={handleJoinProject}
               >
                 <Text style={styles.joinButtonText}>Join Project</Text>
               </TouchableOpacity>
