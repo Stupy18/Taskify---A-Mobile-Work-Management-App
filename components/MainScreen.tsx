@@ -477,16 +477,11 @@ const MainScreen: React.FC = () => {
           </Text>
         </View>
       ) : (
-        <ScrollView 
-          style={styles.columnsScroll}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.columnsContainer}>
-            <Column title="To Do" data={tasks.toDo} />
-            <Column title="Doing" data={tasks.doing} />
-            <Column title="Done" data={tasks.done} />
-          </View>
-        </ScrollView>
+        <View style={styles.columnsContainer}>
+          <Column title="To Do" data={tasks.toDo} />
+          <Column title="Doing" data={tasks.doing} />
+          <Column title="Done" data={tasks.done} />
+        </View>
       )}
 
       {/* New Task Modal */}

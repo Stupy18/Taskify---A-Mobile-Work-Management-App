@@ -1,5 +1,4 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -9,7 +8,6 @@ import 'react-native-reanimated';
 import { UserProvider } from '../contexts/UserContext';
 import { TaskProvider } from '@/contexts/TaskProvider';
 import { ProjectProvider } from '@/contexts/ProjectProvider';
-
 
 export {
   ErrorBoundary,
@@ -41,21 +39,17 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
   return (
     <UserProvider>
       <ProjectProvider>
         <TaskProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-            }}
-          >
-            <Stack.Screen name="index" />
-            {/* Other screens */}
+          <Stack>
+            <Stack.Screen 
+              name="(tabs)" 
+              options={{
+                headerShown: false,
+              }}
+            />
           </Stack>
         </TaskProvider>
       </ProjectProvider>
