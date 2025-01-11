@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { UserProvider } from '../contexts/UserContext';
 import { TaskProvider } from '@/contexts/TaskProvider';
 import { ProjectProvider } from '@/contexts/ProjectProvider';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 
 export {
   ErrorBoundary,
@@ -42,6 +43,7 @@ export default function RootLayout() {
   return (
     <UserProvider>
       <ProjectProvider>
+      <NotificationProvider>
         <TaskProvider>
           <Stack>
             <Stack.Screen 
@@ -52,6 +54,7 @@ export default function RootLayout() {
             />
           </Stack>
         </TaskProvider>
+        </NotificationProvider>
       </ProjectProvider>
     </UserProvider>
   );
